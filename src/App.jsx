@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { useAuth } from "./context/AuthContext";
@@ -12,6 +12,8 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import DashboardPage from "./pages/DashboardPage";
 import BrowseJobsPage from "./pages/BrowseJobsPage";
 import JobDetailsPage from "./pages/JobDetailsPage";
@@ -19,10 +21,15 @@ import PostJobPage from "./pages/PostJobPage";
 import FreelancersPage from "./pages/FreelancersPage";
 import FreelancerProfilePage from "./pages/FreelancerProfilePage";
 import MyProfilePage from "./pages/MyProfilePage";
+import FreelancerOnboardingPage from "./pages/FreelancerOnboardingPage";
+import ClientOnboardingPage from "./pages/ClientOnboardingPage";
 import MessagesPage from "./pages/MessagesPage";
+import DirectMessagePage from "./pages/DirectMessagePage";
 import ProposalsPage from "./pages/ProposalsPage";
 import ProposalDetailsPage from "./pages/ProposalDetailsPage";
 import ContractsPage from "./pages/ContractsPage";
+import ContractDetails from "./pages/ContractDetails";
+import ContractWorkspace from "./pages/contracts/ContractWorkspace"; // Added Import
 import PaymentsPage from "./pages/PaymentsPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
@@ -54,8 +61,9 @@ function App() {
   const location = useLocation();
 
   /* -------------------------------------------------------------------------- */
-  /*                               SOCKET SETUP                                 */
+  /* SOCKET SETUP                                */
   /* -------------------------------------------------------------------------- */
+
   useEffect(() => {
     if (!isAuthResolved) return;
 
@@ -95,8 +103,9 @@ function App() {
   ]);
 
   /* -------------------------------------------------------------------------- */
-  /*                        FETCH UNREAD NOTIFICATIONS                           */
+  /* FETCH UNREAD NOTIFICATIONS                          */
   /* -------------------------------------------------------------------------- */
+
   useEffect(() => {
     if (!isAuthResolved) return;
 
@@ -114,8 +123,9 @@ function App() {
   }, [isAuthenticated, user, isAuthResolved, setUnreadCount]);
 
   /* -------------------------------------------------------------------------- */
-  /*                        FETCH UNREAD PROPOSALS (CLIENT)                      */
+  /* FETCH UNREAD PROPOSALS (CLIENT)                     */
   /* -------------------------------------------------------------------------- */
+
   useEffect(() => {
     if (!isAuthResolved) return;
 
@@ -133,30 +143,32 @@ function App() {
   }, [isAuthenticated, user, isAuthResolved, setUnreadProposalCount]);
 
   /* -------------------------------------------------------------------------- */
-  /*                                   RENDER                                   */
+  /* RENDER                                   */
   /* -------------------------------------------------------------------------- */
+
   return (
-    <div className=" flex flex-col">
+    <div className="flex flex-col">
       <ToastContainer />
 
-      {/* Navbar only after auth is resolved */}
       {isAuthResolved && <NavbarResolver />}
 
       <main className={`flex-grow ${isAuthResolved ? "pt-16" : ""}`}>
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
+
             {/* -------------------- PUBLIC ROUTES -------------------- */}
+
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+            <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
             <Route path="/browse-jobs" element={<BrowseJobsPage />} />
             <Route path="/jobs/:id" element={<JobDetailsPage />} />
             <Route path="/freelancers" element={<FreelancersPage />} />
-            <Route
-              path="/freelancers/:id"
-              element={<FreelancerProfilePage />}
-            />
+            <Route path="/freelancers/:id" element={<FreelancerProfilePage />} />
             <Route path="/how-it-works" element={<HowItWorksPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
@@ -164,6 +176,7 @@ function App() {
             <Route path="/careers" element={<CareersPage />} />
 
             {/* -------------------- PROTECTED ROUTES -------------------- */}
+
             <Route
               path="/dashboard"
               element={
@@ -237,6 +250,24 @@ function App() {
             />
 
             <Route
+              path="/profile/setup"
+              element={
+                <ProtectedRoute roles={["freelancer"]}>
+                  <FreelancerOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/client/profile/setup"
+              element={
+                <ProtectedRoute roles={["client"]}>
+                  <ClientOnboardingPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
               path="/settings"
               element={
                 <ProtectedRoute>
@@ -250,6 +281,15 @@ function App() {
               element={
                 <ProtectedRoute>
                   <MessagesPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/messages/direct/:userId"
+              element={
+                <ProtectedRoute>
+                  <DirectMessagePage />
                 </ProtectedRoute>
               }
             />
@@ -272,6 +312,8 @@ function App() {
               }
             />
 
+            {/* CONTRACT ROUTES */}
+
             <Route
               path="/contracts"
               element={
@@ -280,6 +322,27 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            <Route
+              path="/contracts/:id"
+              element={
+                <ProtectedRoute>
+                  <ContractDetails />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Added Workspace Route */}
+            <Route
+              path="/contracts/:id/workspace"
+              element={
+                <ProtectedRoute>
+                  <ContractWorkspace />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* PAYMENTS */}
 
             <Route
               path="/payments"
@@ -300,7 +363,9 @@ function App() {
             />
 
             {/* -------------------- ADMIN ROUTES -------------------- */}
+
             <Route path="/admin/login" element={<AdminLoginPage />} />
+
             <Route
               path="/admin/dashboard"
               element={

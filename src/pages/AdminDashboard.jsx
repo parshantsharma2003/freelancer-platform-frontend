@@ -1025,7 +1025,7 @@ const AdminDashboard = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{contract.job?.title}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contract.client?.firstName} {contract.client?.lastName}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contract.freelancer?.firstName} {contract.freelancer?.lastName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(contract.budget)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(contract.budget?.amount || 0)}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                             contract.status === 'active' ? 'bg-green-100 text-green-800' : 

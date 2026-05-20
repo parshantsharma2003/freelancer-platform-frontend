@@ -1,305 +1,607 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
-import { UserPlus, User, Mail, Lock, Briefcase, Users, Check, Github, Linkedin } from 'lucide-react';
+import {
+  Briefcase,
+  CheckCircle2,
+  ChevronLeft,
+  KeyRound,
+  Mail,
+  Phone,
+  ShieldCheck,
+  User,
+  Users,
+} from 'lucide-react';
 import { FaGoogle } from 'react-icons/fa';
-import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
-import Card from '../components/ui/Card';
+import { useAuth } from '../context/AuthContext';
 import { showToast } from '../components/ui/Toast';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import { authAPI } from '../services/api';
+import { ENV } from '../config/env';
+
+const OTP_LENGTH = 6;
+
+const STEPS = {
+  METHOD: 1,
+  FORM: 2,
+  ROLE: 3,
+  VERIFY: 4,
+};
 
 const RegisterPage = () => {
   const navigate = useNavigate();
-  const { register, isLoading } = useAuth();
-  const [step, setStep] = useState(1); // 1: Role selection, 2: Form
+  const { register, otpLogin, isLoading, isAuthenticated, isAuthResolved, user } = useAuth();
+
+  const [step, setStep] = useState(STEPS.METHOD);
+  const [signupMethod, setSignupMethod] = useState('');
+  const [error, setError] = useState('');
+  const [verificationMessage, setVerificationMessage] = useState('');
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [otpValues, setOtpValues] = useState(Array(OTP_LENGTH).fill(''));
+  const otpInputRefs = useRef([]);
+
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
+    fullName: '',
     email: '',
+    phone: '',
     password: '',
+    confirmPassword: '',
     role: '',
   });
-  const [error, setError] = useState('');
 
-  const handleRoleSelect = (role) => {
-    setFormData({ ...formData, role });
-    setStep(2);
+  useEffect(() => {
+    if (!isAuthResolved) return;
+
+    if (isAuthenticated) {
+      if (user?.role === 'super_admin') {
+        navigate('/admin/dashboard', { replace: true });
+        return;
+      }
+
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, isAuthResolved, navigate, user?.role]);
+
+  useEffect(() => {
+    if (step === STEPS.VERIFY) {
+      otpInputRefs.current[0]?.focus();
+    }
+  }, [step]);
+
+  const passwordChecks = useMemo(() => {
+    const password = formData.password || '';
+    return {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /\d/.test(password),
+      matches: password.length > 0 && password === formData.confirmPassword,
+    };
+  }, [formData.password, formData.confirmPassword]);
+
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+  const validateBasicForm = () => {
+    if (!formData.fullName.trim()) return 'Full name is required';
+    if (!formData.email.trim()) return 'Email is required';
 
-    // Prevent duplicate submissions
-    if (isLoading) {
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    if (!emailRegex.test(formData.email.trim())) return 'Please provide a valid email';
+
+    if (!passwordChecks.length || !passwordChecks.uppercase || !passwordChecks.lowercase || !passwordChecks.number) {
+      return 'Password must be at least 8 chars with uppercase, lowercase, and number';
+    }
+
+    if (!passwordChecks.matches) return 'Confirm password must match password';
+
+    if (formData.phone?.trim()) {
+      const phoneRegex = /^\+?[1-9]\d{7,14}$/;
+      if (!phoneRegex.test(formData.phone.trim())) {
+        return 'Phone must be in international format (e.g., +14155552671)';
+      }
+    }
+
+    return null;
+  };
+
+  const handleSelectMethod = (method) => {
+    setError('');
+    setSignupMethod(method);
+
+    if (method === 'email') {
+      setStep(STEPS.FORM);
       return;
     }
 
-    const result = await register(formData);
+    if (method === 'google') {
+      setStep(STEPS.ROLE);
+      return;
+    }
 
-    if (result.success) {
-      showToast.success('Account created successfully!');
-      
-      // Navigate once after successful registration based on role
-      const role = result.user?.role;
-      if (role === 'client') {
-        navigate('/dashboard', { replace: true });
-      } else if (role === 'freelancer') {
-        navigate('/dashboard', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
-    } else {
-      setError(result.error);
-      showToast.error(result.error);
+    showToast.info('Phone OTP registration is optional and will be enabled in a later update.');
+  };
+
+  const handleBasicFormContinue = (event) => {
+    event.preventDefault();
+    setError('');
+
+    const validationError = validateBasicForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setStep(STEPS.ROLE);
+  };
+
+  const handleSelectRole = (role) => {
+    setError('');
+    updateField('role', role);
+
+    if (signupMethod === 'google') {
+      window.location.href = `${ENV.OAUTH_BASE_URL}/auth/oauth/google?role=${role}`;
+      return;
     }
   };
 
-  const handleOAuthRegister = (provider) => {
-    const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
-    const normalizedBase = rawApiUrl.replace(/\/+$/, '').replace(/\/api$/i, '');
-    const oauthBase = `${normalizedBase}/api`;
-    window.location.href = `${oauthBase}/auth/oauth/${provider}?role=${formData.role || 'freelancer'}`;
+  const handleCreateAccount = async () => {
+    setError('');
+
+    if (!formData.role) {
+      setError('Please select a role to continue');
+      return;
+    }
+
+    const payload = {
+      fullName: formData.fullName.trim(),
+      email: formData.email.trim().toLowerCase(),
+      phone: formData.phone.trim() || undefined,
+      password: formData.password,
+      confirmPassword: formData.confirmPassword,
+      role: formData.role,
+    };
+
+    const result = await register(payload);
+
+    if (!result.success) {
+      if (!result.requiresEmailVerification) {
+        setError(result.error || 'Registration failed');
+        showToast.error(result.error || 'Registration failed');
+        return;
+      }
+    }
+
+    if (result.requiresEmailVerification) {
+      setStep(STEPS.VERIFY);
+      setVerificationMessage('We sent a verification code to your email. Enter it below to activate your account.');
+      setOtpValues(Array(OTP_LENGTH).fill(''));
+      showToast.info('Account created. Enter the OTP to complete registration.');
+      return;
+    }
+
+    showToast.success('Registration completed successfully');
+    navigate('/login', { replace: true });
   };
 
-  const roles = [
+  const roleCards = [
     {
       value: 'freelancer',
-      title: "I'm a Freelancer",
-      description: 'I want to work on projects',
-      icon: <Briefcase className="h-8 w-8" />,
-      features: ['Find great projects', 'Set your own rates', 'Build your portfolio'],
-      color: 'from-primary-500 to-primary-600',
+      title: 'Freelancer',
+      description: 'Build your profile and get hired for projects.',
+      icon: <Briefcase className="h-6 w-6" />,
     },
     {
       value: 'client',
-      title: "I'm a Client",
-      description: 'I want to hire talent',
-      icon: <Users className="h-8 w-8" />,
-      features: ['Post unlimited jobs', 'Hire top talent', 'Secure payments'],
-      color: 'from-blue-500 to-blue-600',
+      title: 'Client',
+      description: 'Post jobs and hire vetted freelance talent.',
+      icon: <Users className="h-6 w-6" />,
     },
   ];
 
+  const otp = useMemo(() => otpValues.join(''), [otpValues]);
+
+  const handleOtpChange = (index, value) => {
+    if (!/^\d?$/.test(value)) return;
+
+    const nextValues = [...otpValues];
+    nextValues[index] = value;
+    setOtpValues(nextValues);
+
+    if (value && index < OTP_LENGTH - 1) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    setError('');
+
+    if (!formData.email.trim()) {
+      setError('Email is required');
+      return;
+    }
+
+    if (otp.length !== OTP_LENGTH) {
+      setError('Enter the 6-digit OTP');
+      return;
+    }
+
+    setVerificationLoading(true);
+    try {
+      const result = await otpLogin({
+        email: formData.email.trim().toLowerCase(),
+        otp,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'OTP verification failed');
+      }
+
+      showToast.success('Registration completed. Email verified successfully');
+      const role = result.user?.role || formData.role;
+      if (role === 'client') {
+        navigate('/client/profile/setup', { replace: true });
+        return;
+      }
+      if (role === 'freelancer') {
+        navigate('/profile/setup', { replace: true });
+        return;
+      }
+      navigate('/dashboard', { replace: true });
+    } catch (verificationError) {
+      const message = verificationError?.response?.data?.message || verificationError?.message || 'OTP verification failed';
+      setError(message);
+      showToast.error(message);
+    } finally {
+      setVerificationLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!formData.email.trim()) {
+      setError('Email is required');
+      return;
+    }
+
+    setResendLoading(true);
+    try {
+      await authAPI.requestLoginOtp(formData.email.trim().toLowerCase());
+      setOtpValues(Array(OTP_LENGTH).fill(''));
+      setVerificationMessage('A new verification code has been sent to your email.');
+      showToast.success('Verification code sent');
+    } catch (resendError) {
+      const message = resendError?.response?.data?.message || 'Unable to resend OTP';
+      setError(message);
+      showToast.error(message);
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-gray-50 flex items-center justify-center py-12 px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="max-w-4xl w-full"
-      >
-        {/* Header */}
-        <div className="text-center mb-8">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-          >
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-2xl mb-4">
-              <UserPlus className="h-8 w-8 text-primary-600" />
-            </div>
-          </motion.div>
-          <h2 className="text-3xl font-display font-bold text-gray-900">Join FreelancePro</h2>
-          <p className="mt-2 text-gray-600">
-            {step === 1 ? 'Choose how you want to get started' : 'Create your account'}
-          </p>
-        </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.12),_transparent_30%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] py-12 px-4">
+      <div className="max-w-4xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="text-center mb-8"
+        >
+          <div className="inline-flex items-center gap-2 rounded-full bg-white border border-slate-200 px-4 py-1.5 text-sm text-slate-700">
+            <ShieldCheck className="h-4 w-4 text-primary-600" />
+            Secure Registration
+          </div>
+          <h1 className="mt-4 text-4xl font-bold text-slate-900">Create your account safely</h1>
+          <p className="mt-2 text-slate-600">Verification-first registration with role-based onboarding.</p>
+        </motion.div>
+
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         <AnimatePresence mode="wait">
-          {step === 1 ? (
+          {step === STEPS.METHOD && (
             <motion.div
-              key="step1"
-              initial={{ opacity: 0, x: 20 }}
+              key="method"
+              initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="grid md:grid-cols-2 gap-6"
+              exit={{ opacity: 0, x: -12 }}
             >
-              {roles.map((role, index) => (
-                <motion.div
-                  key={role.value}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 * index }}
-                >
-                  <Card
-                    clickable
-                    onClick={() => handleRoleSelect(role.value)}
-                    className="h-full hover:scale-105 transition-transform cursor-pointer"
-                  >
-                    <Card.Body className="p-8">
-                      <div className={`inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br ${role.color} text-white rounded-2xl mb-4`}>
-                        {role.icon}
-                      </div>
-                      <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                        {role.title}
-                      </h3>
-                      <p className="text-gray-600 mb-6">{role.description}</p>
-                      <ul className="space-y-3">
-                        {role.features.map((feature, i) => (
-                          <li key={i} className="flex items-center text-gray-700">
-                            <Check className="h-5 w-5 text-green-500 mr-2 flex-shrink-0" />
-                            {feature}
-                          </li>
-                        ))}
-                      </ul>
-                    </Card.Body>
-                  </Card>
-                </motion.div>
-              ))}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="step2"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="max-w-md mx-auto"
-            >
-              <Card className="shadow-xl">
-                <Card.Body>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm"
+              <Card className="shadow-sm">
+                <Card.Body className="p-8">
+                  <h2 className="text-2xl font-semibold text-slate-900">1. Select signup method</h2>
+                  <p className="text-slate-600 mt-1">Choose how you want to create your account.</p>
+
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMethod('email')}
+                      className="rounded-2xl border border-slate-200 bg-white hover:border-primary-300 hover:shadow-md transition-all p-5 text-left"
                     >
-                      {error}
-                    </motion.div>
+                      <Mail className="h-6 w-6 text-primary-600" />
+                      <p className="mt-3 font-semibold text-slate-900">Email + Password</p>
+                      <p className="text-sm text-slate-600 mt-1">Recommended secure flow with email verification.</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMethod('google')}
+                      className="rounded-2xl border border-slate-200 bg-white hover:border-primary-300 hover:shadow-md transition-all p-5 text-left"
+                    >
+                      <FaGoogle className="h-6 w-6 text-rose-600" />
+                      <p className="mt-3 font-semibold text-slate-900">Google OAuth</p>
+                      <p className="text-sm text-slate-600 mt-1">Fast signup via verified Google identity.</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMethod('phone')}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-left"
+                    >
+                      <Phone className="h-6 w-6 text-slate-500" />
+                      <p className="mt-3 font-semibold text-slate-700">Phone OTP (Optional)</p>
+                      <p className="text-sm text-slate-500 mt-1">Planned optional method. Use email flow for now.</p>
+                    </button>
+                  </div>
+                </Card.Body>
+              </Card>
+            </motion.div>
+          )}
+
+          {step === STEPS.FORM && (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+            >
+              <Card className="shadow-sm">
+                <Card.Body className="p-8">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-semibold text-slate-900">2. Basic registration details</h2>
+                    <button
+                      type="button"
+                      onClick={() => setStep(STEPS.METHOD)}
+                      className="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-1"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Back
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleBasicFormContinue} className="mt-6 space-y-5">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Full name</label>
+                      <input
+                        type="text"
+                        value={formData.fullName}
+                        onChange={(event) => updateField('fullName', event.target.value)}
+                        className="input"
+                        placeholder="John Doe"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(event) => updateField('email', event.target.value)}
+                        className="input"
+                        placeholder="you@example.com"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Phone (optional)</label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(event) => updateField('phone', event.target.value)}
+                        className="input"
+                        placeholder="+14155552671"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+                        <input
+                          type="password"
+                          value={formData.password}
+                          onChange={(event) => updateField('password', event.target.value)}
+                          className="input"
+                          placeholder="Create a strong password"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Confirm password</label>
+                        <input
+                          type="password"
+                          value={formData.confirmPassword}
+                          onChange={(event) => updateField('confirmPassword', event.target.value)}
+                          className="input"
+                          placeholder="Re-enter password"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-medium text-slate-700">Password requirements</p>
+                      <ul className="mt-2 text-xs text-slate-600 space-y-1">
+                        <li className={passwordChecks.length ? 'text-emerald-700' : ''}>At least 8 characters</li>
+                        <li className={passwordChecks.uppercase ? 'text-emerald-700' : ''}>One uppercase letter</li>
+                        <li className={passwordChecks.lowercase ? 'text-emerald-700' : ''}>One lowercase letter</li>
+                        <li className={passwordChecks.number ? 'text-emerald-700' : ''}>One number</li>
+                        <li className={passwordChecks.matches ? 'text-emerald-700' : ''}>Passwords match</li>
+                      </ul>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button type="submit" variant="primary" icon={<KeyRound />}>Continue</Button>
+                    </div>
+                  </form>
+                </Card.Body>
+              </Card>
+            </motion.div>
+          )}
+
+          {step === STEPS.ROLE && (
+            <motion.div
+              key="role"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+            >
+              <Card className="shadow-sm">
+                <Card.Body className="p-8">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-semibold text-slate-900">3. Select your role</h2>
+                    <button
+                      type="button"
+                      onClick={() => setStep(signupMethod === 'google' ? STEPS.METHOD : STEPS.FORM)}
+                      className="text-sm text-slate-600 hover:text-slate-900 inline-flex items-center gap-1"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Back
+                    </button>
+                  </div>
+
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {roleCards.map((role) => (
+                      <button
+                        key={role.value}
+                        type="button"
+                        onClick={() => handleSelectRole(role.value)}
+                        className={`rounded-2xl border p-5 text-left transition-all ${formData.role === role.value ? 'border-primary-400 bg-primary-50' : 'border-slate-200 hover:border-primary-300 hover:shadow-sm'}`}
+                      >
+                        <div className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-white border border-slate-200 text-primary-700">
+                          {role.icon}
+                        </div>
+                        <p className="mt-3 font-semibold text-slate-900">{role.title}</p>
+                        <p className="text-sm text-slate-600 mt-1">{role.description}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {signupMethod === 'email' && (
+                    <div className="mt-6 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="primary"
+                        loading={isLoading}
+                        disabled={!formData.role}
+                        onClick={handleCreateAccount}
+                      >
+                        Create Account Securely
+                      </Button>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </motion.div>
+          )}
+
+          {step === STEPS.VERIFY && (
+            <motion.div
+              key="verify"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+            >
+              <Card className="shadow-sm">
+                <Card.Body className="p-8">
+                  <div className="mx-auto h-14 w-14 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+                    <CheckCircle2 className="h-7 w-7" />
+                  </div>
+
+                  <h2 className="mt-4 text-2xl font-semibold text-slate-900 text-center">4. Verify your email</h2>
+                  <p className="mt-2 text-slate-600 text-center">
+                    Enter the 6-digit code sent to <strong>{formData.email}</strong> to finish creating your account.
+                  </p>
+
+                  {verificationMessage && (
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-center">
+                      {verificationMessage}
+                    </div>
                   )}
 
-                  {/* Role Badge */}
-                  <div className="mb-6 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 bg-gradient-to-br ${formData.role === 'freelancer' ? 'from-primary-500 to-primary-600' : 'from-blue-500 to-blue-600'} text-white rounded-lg`}>
-                        {formData.role === 'freelancer' ? <Briefcase className="h-5 w-5" /> : <Users className="h-5 w-5" />}
-                      </div>
-                      <span className="font-semibold text-gray-900">
-                        {formData.role === 'freelancer' ? 'Freelancer Account' : 'Client Account'}
-                      </span>
+                  <div className="mt-6">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">6-digit OTP</label>
+                    <div className="flex gap-2 justify-between" onPaste={(event) => {
+                      event.preventDefault();
+                      const pasted = (event.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, OTP_LENGTH);
+                      if (!pasted) return;
+                      const next = Array(OTP_LENGTH).fill('');
+                      pasted.split('').forEach((digit, idx) => { next[idx] = digit; });
+                      setOtpValues(next);
+                      otpInputRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
+                    }}>
+                      {otpValues.map((digit, index) => (
+                        <input
+                          key={index}
+                          ref={(element) => { otpInputRefs.current[index] = element; }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(event) => handleOtpChange(index, event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Backspace' && !otpValues[index] && index > 0) {
+                              otpInputRefs.current[index - 1]?.focus();
+                            }
+                            if (event.key === 'ArrowLeft' && index > 0) {
+                              otpInputRefs.current[index - 1]?.focus();
+                            }
+                            if (event.key === 'ArrowRight' && index < OTP_LENGTH - 1) {
+                              otpInputRefs.current[index + 1]?.focus();
+                            }
+                          }}
+                          className="h-12 w-12 rounded-xl border border-slate-300 text-center text-lg font-semibold focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none"
+                        />
+                      ))}
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setStep(1)}
-                    >
-                      Change
-                    </Button>
                   </div>
 
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input
-                        label="First Name"
-                        type="text"
-                        required
-                        value={formData.firstName}
-                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                        icon={<User />}
-                        placeholder="John"
-                      />
-                      <Input
-                        label="Last Name"
-                        type="text"
-                        required
-                        value={formData.lastName}
-                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                        placeholder="Doe"
-                      />
-                    </div>
-
-                    <Input
-                      label="Email Address"
-                      type="email"
-                      required
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      icon={<Mail />}
-                      placeholder="you@example.com"
-                    />
-
-                    <Input
-                      label="Password"
-                      type="password"
-                      required
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      icon={<Lock />}
-                      placeholder="••••••••"
-                      helper="Must be at least 8 characters"
-                    />
-
-                    <div className="pt-2">
-                      <label className="flex items-start">
-                        <input
-                          type="checkbox"
-                          required
-                          className="mt-1 mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <span className="text-sm text-gray-600">
-                          I agree to the{' '}
-                          <Link to="/terms" className="text-primary-600 hover:text-primary-700">
-                            Terms of Service
-                          </Link>{' '}
-                          and{' '}
-                          <Link to="/privacy" className="text-primary-600 hover:text-primary-700">
-                            Privacy Policy
-                          </Link>
-                        </span>
-                      </label>
-                    </div>
-
+                  <div className="mt-6 flex flex-col sm:flex-row gap-3">
                     <Button
-                      type="submit"
+                      type="button"
                       variant="primary"
                       fullWidth
-                      size="lg"
-                      loading={isLoading}
+                      loading={verificationLoading}
+                      onClick={handleVerifyOtp}
                     >
-                      Create Account
+                      Verify Email
                     </Button>
-                  </form>
-
-                  {/* OAuth Divider */}
-                  <div className="relative my-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-300"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-4 bg-white text-gray-500">Or sign up with</span>
-                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      fullWidth
+                      loading={resendLoading}
+                      onClick={handleResendOtp}
+                    >
+                      Resend OTP
+                    </Button>
                   </div>
 
-                  {/* OAuth Buttons */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleOAuthRegister('google')}
-                      icon={<FaGoogle className="h-5 w-5" />}
-                      className="flex-1"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => handleOAuthRegister('github')}
-                      icon={<Github className="h-5 w-5" />}
-                      className="flex-1"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => handleOAuthRegister('linkedin')}
-                      icon={<Linkedin className="h-5 w-5" />}
-                      className="flex-1"
-                    />
-                  </div>
-
-                  <div className="mt-6 text-center">
-                    <p className="text-gray-600">
-                      Already have an account?{' '}
-                      <Link to="/login" className="text-primary-600 hover:text-primary-700 font-semibold">
-                        Sign in
-                      </Link>
-                    </p>
+                  <div className="mt-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setStep(STEPS.ROLE)}
+                      className="text-sm text-slate-600 hover:text-slate-900"
+                    >
+                      Back to role selection
+                    </button>
                   </div>
                 </Card.Body>
               </Card>
@@ -307,18 +609,10 @@ const RegisterPage = () => {
           )}
         </AnimatePresence>
 
-        {/* Trust Indicators */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="mt-8 text-center"
-        >
-          <p className="text-sm text-gray-500">
-            Trusted by 10,000+ freelancers and clients worldwide
-          </p>
-        </motion.div>
-      </motion.div>
+        <p className="mt-6 text-center text-sm text-slate-600">
+          Already have an account? <Link to="/login" className="text-primary-700 font-medium hover:underline">Sign in</Link>
+        </p>
+      </div>
     </div>
   );
 };

@@ -53,11 +53,17 @@ const PostJobPage = () => {
       queryClient.invalidateQueries('myJobs');
 
       if (createdJob) {
-        queryClient.setQueryData(['myJobs', 'all'], (prev = []) => [createdJob, ...prev]);
+        queryClient.setQueryData(['myJobs', 'all'], (prev) => {
+          const previousItems = Array.isArray(prev) ? prev : [];
+          return [createdJob, ...previousItems];
+        });
         queryClient.setQueryData([
           'myJobs',
           createdJob.status || 'open'
-        ], (prev = []) => [createdJob, ...prev]);
+        ], (prev) => {
+          const previousItems = Array.isArray(prev) ? prev : [];
+          return [createdJob, ...previousItems];
+        });
       }
       
       // Navigate to my jobs page

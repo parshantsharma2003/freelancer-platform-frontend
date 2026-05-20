@@ -1,73 +1,134 @@
-import axios from 'axios';
+import axios from "axios";
+import { ENV } from "../config/env";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = ENV.API_BASE_URL;
 
 // Create axios instance
 const api = axios.create({
   baseURL: API_URL,
+  withCredentials: true, // send cookies automatically
   headers: {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-cache',
+    "Content-Type": "application/json",
+    "Cache-Control": "no-cache",
   },
 });
 
-// Request interceptor to add auth token
+
+// ================================
+// REQUEST INTERCEPTOR
+// ================================
+
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
+
+    const token = localStorage.getItem("accessToken");
+
+    // Only attach header if token exists
+    if (token && token !== "undefined" && token !== "null") {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      delete config.headers.Authorization;
     }
+
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle token refresh
+
+// ================================
+// RESPONSE INTERCEPTOR (REFRESH)
+// ================================
+
 api.interceptors.response.use(
+
   (response) => response,
+
   async (error) => {
+
     const originalRequest = error.config;
 
-    // If error is 401 and we haven't retried yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    if (originalRequest.skipAuthRefresh) {
+      return Promise.reject(error);
+    }
+
+    const requestUrl = String(originalRequest.url || "");
+    const isRefreshRequest = requestUrl.includes("/auth/refresh");
+    const isLoginLikeRequest =
+      requestUrl.includes("/auth/login") ||
+      requestUrl.includes("/auth/register") ||
+      requestUrl.includes("/auth/request-login-otp") ||
+      requestUrl.includes("/auth/verify-login-otp") ||
+      requestUrl.includes("/auth/forgot-password") ||
+      requestUrl.includes("/auth/reset-password");
+    const storedAccessToken = localStorage.getItem("accessToken");
+    const storedUser = localStorage.getItem("user");
+    const hasStoredAccessToken = !!(
+      storedAccessToken &&
+      storedAccessToken !== "undefined" &&
+      storedAccessToken !== "null"
+    );
+    const hasStoredUser = !!(
+      storedUser &&
+      storedUser !== "undefined" &&
+      storedUser !== "null"
+    );
+    const shouldAttemptRefresh = hasStoredAccessToken || hasStoredUser;
+
+    // Retry only once and never recursively retry refresh endpoint.
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isRefreshRequest &&
+      shouldAttemptRefresh
+    ) {
+
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        
-        if (!refreshToken) {
-          // No refresh token available - let React handle auth state
-          return Promise.reject(error);
+
+        const refreshResponse = await axios.post(
+          `${API_URL}/auth/refresh`,
+          {},
+          {
+            withCredentials: true,
+            skipAuthRefresh: true,
+          }
+        );
+
+        const accessToken = refreshResponse?.data?.data?.accessToken;
+
+        if (accessToken) {
+          localStorage.setItem("accessToken", accessToken);
+          originalRequest.headers = originalRequest.headers || {};
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        } else {
+          localStorage.removeItem("accessToken");
+          if (originalRequest.headers) {
+            delete originalRequest.headers.Authorization;
+          }
         }
 
-        const response = await axios.post(`${API_URL}/auth/refresh`, {
-          refreshToken,
-        });
-
-        const { accessToken, refreshToken: newRefreshToken } = response.data.data;
-        localStorage.setItem('accessToken', accessToken);
-        if (newRefreshToken) {
-          localStorage.setItem('refreshToken', newRefreshToken);
-        }
-
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
-        
+
       } catch (refreshError) {
-        // Refresh failed - clear auth and let React handle redirect
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        
-        // Dispatch custom event to notify AuthContext
-        window.dispatchEvent(new CustomEvent('auth:logout'));
-        
+
+        // Clear auth state
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("user");
+
+        // Notify auth context
+        window.dispatchEvent(new CustomEvent("auth:logout"));
+
         return Promise.reject(refreshError);
       }
+
     }
 
     return Promise.reject(error);

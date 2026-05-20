@@ -1,235 +1,337 @@
-import { motion } from 'framer-motion';
-import { 
-  DollarSign, 
-  TrendingUp, 
+import { motion } from "framer-motion";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "react-query";
+import {
+  DollarSign,
+  TrendingUp,
   Download,
   Calendar,
   CreditCard,
   Clock,
   CheckCircle,
   ArrowUpRight,
-  ArrowDownRight
-} from 'lucide-react';
+} from "lucide-react";
+
+import { paymentAPI, userAPI } from "../services/api";
+import { showToast } from "../components/ui/Toast";
 
 const EarningsPage = () => {
+  const queryClient = useQueryClient();
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+
+  /* --------------------------------------- */
+  /* Fetch Earnings Stats                    */
+  /* --------------------------------------- */
+
+  const { data: statsData } = useQuery(
+    "paymentStats",
+    () => paymentAPI.getPaymentStats()
+  );
+
+  const { data: earningsData } = useQuery(
+    "earningsChart",
+    () => paymentAPI.getEarningsByMonth()
+  );
+
+  const { data: transactionsData } = useQuery(
+    "myPayments",
+    () => paymentAPI.getMyPayments()
+  );
+
+  const { data: walletData } = useQuery(
+    "walletSummary",
+    () => userAPI.getWalletSummary(),
+    {
+      retry: false
+    }
+  );
+
+  const withdrawalMutation = useMutation(
+    (amount) => userAPI.requestWalletWithdrawal({ amount }),
+    {
+      onSuccess: (response) => {
+        showToast.success(response?.data?.message || "Withdrawal request submitted");
+        setWithdrawAmount("");
+        queryClient.invalidateQueries("walletSummary");
+        queryClient.invalidateQueries("paymentStats");
+      },
+      onError: (error) => {
+        showToast.error(error?.response?.data?.message || "Failed to request withdrawal");
+      }
+    }
+  );
+
+  const statsResponse = statsData?.data?.data || {};
+  const transactions = transactionsData?.data?.data?.payments || [];
+  const wallet = walletData?.data?.data?.wallet || {};
+  const availableBalance = Number(wallet.availableBalance || 0);
+  const pendingBalance = Number(wallet.pendingBalance || 0);
+
+  const handleWithdraw = (event) => {
+    event.preventDefault();
+
+    const amount = Number(withdrawAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast.error("Enter a valid withdrawal amount");
+      return;
+    }
+
+    if (amount > availableBalance) {
+      showToast.error("Withdrawal amount cannot exceed available balance");
+      return;
+    }
+
+    withdrawalMutation.mutate(amount);
+  };
+
+  /* --------------------------------------- */
+  /* Stats Cards                             */
+  /* --------------------------------------- */
+
   const stats = [
     {
-      label: 'Total Earnings',
-      value: '$0',
-      change: '+0%',
+      label: "Total Earnings",
+      value: `$${statsResponse.total || 0}`,
+      change: `${statsResponse.successRate || 0}%`,
       icon: DollarSign,
-      color: 'bg-green-500',
-      trend: 'up'
+      color: "bg-green-500",
+      trend: "up"
     },
     {
-      label: 'This Month',
-      value: '$0',
-      change: '+0%',
-      icon: Calendar,
-      color: 'bg-blue-500',
-      trend: 'up'
-    },
-    {
-      label: 'Pending',
-      value: '$0',
-      change: '0%',
-      icon: Clock,
-      color: 'bg-yellow-500',
-      trend: 'neutral'
-    },
-    {
-      label: 'Completed',
-      value: '0',
-      change: '+0%',
+      label: "Completed Payments",
+      value: statsResponse.completed || 0,
+      change: "+0%",
       icon: CheckCircle,
-      color: 'bg-purple-500',
-      trend: 'up'
+      color: "bg-purple-500",
+      trend: "up"
     },
-  ];
-
-  const recentTransactions = [
     {
-      type: 'No transactions yet',
-      description: 'Complete projects to see your earnings',
-      amount: '$0',
-      date: 'Get started',
-      status: 'pending'
+      label: "Pending",
+      value:
+        transactions.filter((p) => p.status === "processing").length || 0,
+      change: "0%",
+      icon: Clock,
+      color: "bg-yellow-500",
+      trend: "neutral"
+    },
+    {
+      label: "Transactions",
+      value: transactions.length || 0,
+      change: "+0%",
+      icon: Calendar,
+      color: "bg-blue-500",
+      trend: "up"
     }
   ];
 
+  /* --------------------------------------- */
+  /* Render                                  */
+  /* --------------------------------------- */
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <div className="max-w-7xl mx-auto px-4">
+
         {/* Header */}
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
           className="mb-8"
         >
           <div className="flex items-center justify-between">
+
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center space-x-3">
+              <h1 className="text-3xl font-bold flex items-center gap-2">
                 <DollarSign className="w-8 h-8 text-primary-600" />
-                <span>Earnings</span>
+                Earnings
               </h1>
-              <p className="mt-2 text-gray-600">
+
+              <p className="text-gray-600">
                 Track your income and manage withdrawals
               </p>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg shadow-md hover:bg-primary-700 transition-colors flex items-center space-x-2"
-            >
+
+            <button className="px-6 py-3 bg-primary-600 text-white rounded-lg flex items-center gap-2">
               <Download className="w-5 h-5" />
-              <span>Download Report</span>
-            </motion.button>
+              Download Report
+            </button>
+
           </div>
         </motion.div>
 
-        {/* Stats Grid */}
+        {/* Stats */}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
           {stats.map((stat, index) => {
+
             const Icon = stat.icon;
-            const TrendIcon = stat.trend === 'up' ? ArrowUpRight : stat.trend === 'down' ? ArrowDownRight : null;
+
             return (
+
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
+                transition={{ delay: index * 0.1 }}
+                className="bg-white p-6 rounded-lg shadow"
               >
-                <div className="flex items-center justify-between mb-4">
+
+                <div className="flex justify-between mb-4">
+
                   <div className={`${stat.color} w-12 h-12 rounded-lg flex items-center justify-center`}>
                     <Icon className="w-6 h-6 text-white" />
                   </div>
-                  {TrendIcon && (
-                    <span className={`flex items-center text-sm font-medium ${
-                      stat.trend === 'up' ? 'text-green-600' : 
-                      stat.trend === 'down' ? 'text-red-600' : 
-                      'text-gray-500'
-                    }`}>
-                      <TrendIcon className="w-4 h-4 mr-1" />
-                      {stat.change}
-                    </span>
-                  )}
+
+                  <span className="flex items-center text-green-600 text-sm">
+                    <ArrowUpRight className="w-4 h-4" />
+                    {stat.change}
+                  </span>
+
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-1">
-                  {stat.value}
-                </h3>
-                <p className="text-sm text-gray-600">
-                  {stat.label}
-                </p>
+
+                <h3 className="text-2xl font-bold">{stat.value}</h3>
+
+                <p className="text-gray-600 text-sm">{stat.label}</p>
+
               </motion.div>
+
             );
+
           })}
+
         </div>
 
-        {/* Earnings Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="bg-white rounded-lg shadow-sm p-6 mb-8"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Earnings Overview
-            </h3>
-            <select className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500">
-              <option>Last 7 days</option>
-              <option>Last 30 days</option>
-              <option>Last 3 months</option>
-              <option>Last year</option>
-            </select>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+
+          <div className="bg-white p-6 rounded-lg shadow">
+            <p className="text-sm text-gray-500 mb-1">Available Balance</p>
+            <p className="text-3xl font-bold text-green-600">${availableBalance.toFixed(2)}</p>
           </div>
-          <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-            <div className="text-center">
-              <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-500">No earnings data yet</p>
-              <p className="text-sm text-gray-400 mt-1">Start working on projects to see your earnings grow</p>
+
+          <div className="bg-white p-6 rounded-lg shadow">
+            <p className="text-sm text-gray-500 mb-1">Pending Withdrawal</p>
+            <p className="text-3xl font-bold text-yellow-600">${pendingBalance.toFixed(2)}</p>
+          </div>
+
+          <form onSubmit={handleWithdraw} className="bg-white p-6 rounded-lg shadow">
+            <p className="text-sm text-gray-500 mb-3">Withdraw Funds</p>
+            <div className="flex gap-3">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={withdrawAmount}
+                onChange={(event) => setWithdrawAmount(event.target.value)}
+                placeholder="Amount"
+                className="w-full border rounded-lg px-3 py-2"
+              />
+              <button
+                type="submit"
+                disabled={withdrawalMutation.isLoading || availableBalance <= 0}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg disabled:opacity-60"
+              >
+                {withdrawalMutation.isLoading ? "Processing..." : "Withdraw"}
+              </button>
             </div>
-          </div>
-        </motion.div>
+            <p className="text-xs text-gray-500 mt-2">
+              Withdrawals require an active Stripe payout account.
+            </p>
+          </form>
 
-        {/* Withdrawal Methods */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-          className="bg-white rounded-lg shadow-sm p-6 mb-8"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Withdrawal Methods
-            </h3>
-            <button className="px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors text-sm">
-              Add Method
-            </button>
-          </div>
-          <div className="text-center py-12">
-            <CreditCard className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">No withdrawal methods added</p>
-            <p className="text-sm text-gray-500 mt-2">Add a payment method to withdraw your earnings</p>
-          </div>
-        </motion.div>
+        </div>
 
-        {/* Recent Transactions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.6 }}
-          className="bg-white rounded-lg shadow-sm p-6"
-        >
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">
+        {/* Earnings Chart Placeholder */}
+
+        <div className="bg-white p-6 rounded-lg shadow mb-8">
+
+          <h3 className="text-lg font-semibold mb-4">
+            Earnings Overview
+          </h3>
+
+          <div className="h-64 flex items-center justify-center bg-gray-50 rounded">
+
+            <div className="text-center">
+
+              <TrendingUp className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+
+              <p className="text-gray-500">
+                Earnings chart will appear here
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* Transactions */}
+
+        <div className="bg-white p-6 rounded-lg shadow">
+
+          <h3 className="text-lg font-semibold mb-6">
             Recent Transactions
           </h3>
-          <div className="space-y-4">
-            {recentTransactions.map((transaction, index) => (
-              <div key={index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-primary-300 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                    transaction.status === 'completed' 
-                      ? 'bg-green-100' 
-                      : transaction.status === 'pending' 
-                      ? 'bg-yellow-100' 
-                      : 'bg-gray-100'
-                  }`}>
-                    {transaction.status === 'completed' ? (
-                      <CheckCircle className="w-6 h-6 text-green-600" />
-                    ) : transaction.status === 'pending' ? (
-                      <Clock className="w-6 h-6 text-yellow-600" />
-                    ) : (
-                      <DollarSign className="w-6 h-6 text-gray-500" />
-                    )}
-                  </div>
+
+          {transactions.length === 0 ? (
+
+            <div className="text-center py-10 text-gray-500">
+              No transactions yet
+            </div>
+
+          ) : (
+
+            <div className="space-y-4">
+
+              {transactions.map((tx) => (
+
+                <div
+                  key={tx._id}
+                  className="flex justify-between border p-4 rounded-lg"
+                >
+
                   <div>
-                    <p className="font-medium text-gray-900">{transaction.type}</p>
-                    <p className="text-sm text-gray-500">{transaction.description}</p>
-                    <p className="text-xs text-gray-400 mt-1">{transaction.date}</p>
+
+                    <p className="font-medium">
+                      {tx.type}
+                    </p>
+
+                    <p className="text-sm text-gray-500">
+                      Contract: {tx.contract?.title}
+                    </p>
+
                   </div>
+
+                  <div className="text-right">
+
+                    <p className="font-semibold">
+                      ${tx.amount}
+                    </p>
+
+                    <span className="text-xs text-gray-500">
+                      {tx.status}
+                    </span>
+
+                  </div>
+
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-gray-900">{transaction.amount}</p>
-                  <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                    transaction.status === 'completed' 
-                      ? 'bg-green-100 text-green-700' 
-                      : transaction.status === 'pending' 
-                      ? 'bg-yellow-100 text-yellow-700' 
-                      : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {transaction.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+
+              ))}
+
+            </div>
+
+          )}
+
+        </div>
+
       </div>
+
     </div>
   );
+
 };
 
 export default EarningsPage;

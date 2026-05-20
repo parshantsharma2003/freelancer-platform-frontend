@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useForm } from 'react-hook-form';
-import { jobAPI, proposalAPI } from '../services/api';
+import { jobAPI, proposalAPI, freelancerAPI, contractAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   Briefcase, DollarSign, Clock, Award, MapPin, Calendar,
-  Send, ArrowLeft, User
+  Send, ArrowLeft, User, Bookmark, MessageCircle
 } from 'lucide-react';
 import { formatCurrency, formatDate, formatRelativeTime } from '../lib/utils';
 
@@ -14,18 +14,48 @@ const JobDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, isAuthResolved, isAuthenticated } = useAuth();
   const [showProposalForm, setShowProposalForm] = useState(false);
   const { register, handleSubmit, formState: { errors }, reset } = useForm();
 
-  const { data: job, isLoading } = useQuery(
+  const { data: jobDetails, isLoading } = useQuery(
     ['job', id],
     () => jobAPI.getJobById(id),
     {
       enabled: !!id,
-      select: (response) => response?.data?.data?.job || null
+      select: (response) => response?.data?.data || null
     }
   );
+
+  const job = jobDetails?.job || null;
+  const clientProfile = jobDetails?.clientProfile || job?.clientProfile || null;
+  const isFreelancer = user?.role === 'freelancer';
+
+  const { data: savedCheck = false, refetch: refetchSavedStatus } = useQuery(
+    ['job-saved-status', id],
+    () => freelancerAPI.checkJobSaved(id),
+    {
+      enabled: !!id && isFreelancer && isAuthResolved && isAuthenticated,
+      select: (response) => !!response?.data?.data?.saved
+    }
+  );
+
+  // Check if there's an active contract with this job's client
+  const { data: contractsData } = useQuery(
+    ['my-contracts-freelancer', user?._id],
+    () => contractAPI.getMyContracts({ status: 'active', limit: 100 }),
+    {
+      enabled: !!user && isFreelancer && isAuthResolved,
+      select: (response) => response?.data?.data?.contracts || []
+    }
+  );
+
+  const activeContractWithClient = useMemo(() => {
+    if (!contractsData || !job?.client?._id) return null;
+    return contractsData.find(
+      (contract) => contract.client?._id === job.client._id || contract.client === job.client._id
+    );
+  }, [contractsData, job?.client?._id]);
 
   const proposalMutation = useMutation(
     (proposalData) => proposalAPI.createProposal(proposalData),
@@ -39,6 +69,60 @@ const JobDetailsPage = () => {
     }
   );
 
+  const saveJobMutation = useMutation(
+    () => freelancerAPI.saveJob(id),
+    {
+      onSuccess: () => {
+        queryClient.setQueryData(['savedJobIds'], (currentJobsResponse) => {
+          const currentJobs = currentJobsResponse?.data?.data?.jobs || [];
+          const nextJobs = currentJobs.some((job) => job._id === id)
+            ? currentJobs
+            : [...currentJobs, job];
+
+          return {
+            data: {
+              data: {
+                jobs: nextJobs,
+                pagination: currentJobsResponse?.data?.data?.pagination || {}
+              }
+            }
+          };
+        });
+
+        queryClient.invalidateQueries('savedJobIds');
+        queryClient.invalidateQueries('savedJobs');
+        refetchSavedStatus();
+        window.dispatchEvent(new CustomEvent('saved-jobs:changed'));
+      }
+    }
+  );
+
+  const unsaveJobMutation = useMutation(
+    () => freelancerAPI.unsaveJob(id),
+    {
+      onSuccess: () => {
+        queryClient.setQueryData(['savedJobIds'], (currentJobsResponse) => {
+          const currentJobs = currentJobsResponse?.data?.data?.jobs || [];
+          const nextJobs = currentJobs.filter((savedJob) => savedJob._id !== id);
+
+          return {
+            data: {
+              data: {
+                jobs: nextJobs,
+                pagination: currentJobsResponse?.data?.data?.pagination || {}
+              }
+            }
+          };
+        });
+
+        queryClient.invalidateQueries('savedJobIds');
+        queryClient.invalidateQueries('savedJobs');
+        refetchSavedStatus();
+        window.dispatchEvent(new CustomEvent('saved-jobs:changed'));
+      }
+    }
+  );
+
   const onSubmitProposal = (data) => {
     const proposalData = {
       jobId: id,
@@ -47,7 +131,10 @@ const JobDetailsPage = () => {
         type: job?.budget?.type || 'fixed', // Match job's budget type
         amount: parseFloat(data.proposedBudget),
       },
-      deliveryTime: parseInt(data.deliveryTime),
+      deliveryTime: {
+        value: parseInt(data.deliveryTime, 10),
+        unit: 'days',
+      },
     };
     proposalMutation.mutate(proposalData);
   };
@@ -76,7 +163,6 @@ const JobDetailsPage = () => {
     );
   }
 
-  const isFreelancer = user?.role === 'freelancer';
   const isClient = user?.role === 'client';
   const isOwner = job.client?._id === user?._id;
 
@@ -107,7 +193,9 @@ const JobDetailsPage = () => {
                     </span>
                     <span className="flex items-center gap-1">
                       <MapPin className="w-4 h-4" />
-                      {job.client?.clientProfile?.location || 'Remote'}
+                      {clientProfile?.location?.city && clientProfile?.location?.country
+                        ? `${clientProfile.location.city}, ${clientProfile.location.country}`
+                        : 'Remote'}
                     </span>
                   </div>
                 </div>
@@ -262,19 +350,19 @@ const JobDetailsPage = () => {
                     {job.client?.firstName} {job.client?.lastName}
                   </p>
                   <p className="text-sm text-gray-600">
-                    {job.client?.clientProfile?.company || 'Individual Client'}
+                    {clientProfile?.companyName || 'Individual Client'}
                   </p>
                 </div>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Jobs Posted</span>
-                  <span className="font-semibold">{job.client?.clientProfile?.totalJobs || 0}</span>
+                  <span className="font-semibold">{clientProfile?.totalJobs || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Total Spent</span>
                   <span className="font-semibold">
-                    {formatCurrency(job.client?.clientProfile?.totalSpent || 0)}
+                    {formatCurrency(clientProfile?.totalSpent || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -292,11 +380,34 @@ const JobDetailsPage = () => {
                   {job.proposalsCount || 0} proposals submitted
                 </p>
                 <button
+                  onClick={() => {
+                    if (savedCheck) {
+                      unsaveJobMutation.mutate();
+                      return;
+                    }
+                    saveJobMutation.mutate();
+                  }}
+                  disabled={saveJobMutation.isLoading || unsaveJobMutation.isLoading}
+                  className="btn-secondary w-full mb-3 flex items-center justify-center gap-2"
+                >
+                  <Bookmark className="w-4 h-4" />
+                  {savedCheck ? 'Remove from Saved Jobs' : 'Save Job'}
+                </button>
+                <button
                   onClick={() => setShowProposalForm(true)}
                   className="btn-primary w-full flex items-center justify-center gap-2"
                 >
                   <Send className="w-4 h-4" />
                   Submit Proposal
+                </button>
+                <button
+                  onClick={() => navigate(`/messages/direct/${job.client?._id}`)}
+                  disabled={!activeContractWithClient}
+                  title={activeContractWithClient ? 'Message client' : 'Messaging is only available after a contract has been successfully created'}
+                  className="btn-outline w-full mt-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Message Client
                 </button>
               </div>
             )}

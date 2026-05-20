@@ -1,32 +1,34 @@
 import { motion } from 'framer-motion';
-import { Bookmark, Search, Filter, MapPin, DollarSign, Clock, Briefcase, X, AlertCircle } from 'lucide-react';
+import { Bookmark, Search, Filter, DollarSign, Clock, Briefcase, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { freelancerAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { PageLoader } from '../components/ui/LoadingSpinner';
 import { showToast } from '../components/ui/Toast';
 import { formatCurrency, formatRelativeTime } from '../lib/utils';
+import { getSavedJobsCache, removeSavedJobFromCache, setSavedJobsCache } from '../lib/savedJobsCache';
 
 const SavedJobsPage = () => {
-  const { accessToken, isAuthResolved } = useAuth();
+  const { isAuthResolved, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [page, setPage] = useState(1);
+  const [cachedSavedJobs, setCachedSavedJobs] = useState(() => getSavedJobsCache());
 
   // Fetch saved jobs
-  const { data = { data: { jobs: [], pagination: {} } }, isLoading, refetch } = useQuery(
+  const savedJobsQuery = useQuery(
     ['savedJobs', page, searchQuery, filterType],
     () => freelancerAPI.getSavedJobs({ 
       page, 
-      limit: 12,
+      limit: 20,
       search: searchQuery || undefined,
       category: filterType !== 'all' ? filterType : undefined
     }),
     {
-      enabled: isAuthResolved && !!accessToken,
+      enabled: isAuthResolved && isAuthenticated,
       refetchOnMount: true,
       refetchOnWindowFocus: true,
       onError: (error) => {
@@ -35,11 +37,41 @@ const SavedJobsPage = () => {
     }
   );
 
+  const apiSavedJobs = savedJobsQuery.data?.data?.jobs;
+  const isLoading = savedJobsQuery.isLoading;
+  const refetch = savedJobsQuery.refetch;
+
+  useEffect(() => {
+    if (!Array.isArray(apiSavedJobs)) {
+      return;
+    }
+
+    if (apiSavedJobs.length > 0) {
+      setSavedJobsCache(apiSavedJobs);
+      setCachedSavedJobs((currentJobs) => {
+        const currentIds = currentJobs.map((job) => job._id).join(',');
+        const nextIds = apiSavedJobs.map((job) => job._id).join(',');
+
+        return currentIds === nextIds ? currentJobs : apiSavedJobs;
+      });
+      return;
+    }
+
+    const cacheJobs = getSavedJobsCache();
+    setCachedSavedJobs((currentJobs) => {
+      const currentIds = currentJobs.map((job) => job._id).join(',');
+      const nextIds = cacheJobs.map((job) => job._id).join(',');
+
+      return currentIds === nextIds ? currentJobs : cacheJobs;
+    });
+  }, [apiSavedJobs]);
+
   // Unsave job mutation
   const unsaveMutation = useMutation(
     (jobId) => freelancerAPI.unsaveJob(jobId),
     {
-      onSuccess: () => {
+      onSuccess: (_, jobId) => {
+        removeSavedJobFromCache(jobId);
         queryClient.invalidateQueries('savedJobs');
         showToast.success('Job removed from saved list');
       },
@@ -55,12 +87,30 @@ const SavedJobsPage = () => {
     unsaveMutation.mutate(jobId);
   };
 
+  useEffect(() => {
+    const syncSavedJobs = () => {
+      setCachedSavedJobs(getSavedJobsCache());
+      refetch();
+    };
+
+    window.addEventListener('saved-jobs:changed', syncSavedJobs);
+
+    return () => {
+      window.removeEventListener('saved-jobs:changed', syncSavedJobs);
+    };
+  }, [refetch]);
+
   if (isLoading) {
     return <PageLoader message="Loading your saved jobs..." />;
   }
 
-  const savedJobs = data?.data?.jobs || [];
-  const pagination = data?.data?.pagination || { total: 0, page: 1, pages: 0 };
+  const savedJobs = Array.isArray(apiSavedJobs) && apiSavedJobs.length > 0
+    ? apiSavedJobs
+    : cachedSavedJobs;
+
+  const pagination = Array.isArray(apiSavedJobs) && apiSavedJobs.length > 0
+    ? (savedJobsQuery.data?.data?.pagination || { total: 0, page: 1, pages: 0 })
+    : { total: cachedSavedJobs.length, page, pages: cachedSavedJobs.length > 0 ? 1 : 0 };
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

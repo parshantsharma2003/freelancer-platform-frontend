@@ -15,20 +15,24 @@ const ProposalsPage = () => {
   const isClient = user?.role === 'client';
   const isFreelancer = user?.role === 'freelancer';
 
-  // Fetch proposals based on role
+  // Fetch proposals based on role (Updated Version)
   const { data: proposals = [], isLoading } = useQuery(
-    ['proposals', filter],
-    () => {
+    ['proposals', user?.role, filter],
+    async () => {
       if (isFreelancer) {
-        return proposalAPI.getMyProposals();
-      } else if (isClient) {
-        return proposalAPI.getReceivedProposals();
+        const res = await proposalAPI.getMyProposals();
+        return res?.data?.data?.proposals || [];
       }
-      return Promise.resolve({ data: { data: { proposals: [] } } });
+
+      if (isClient) {
+        const res = await proposalAPI.getReceivedProposals();
+        return res?.data?.data?.proposals || [];
+      }
+
+      return [];
     },
-    { 
-      enabled: !!user && isAuthResolved && !!accessToken,
-      select: (response) => response?.data?.data?.proposals || []
+    {
+      enabled: !!user && isAuthResolved && !!accessToken
     }
   );
 
@@ -85,6 +89,22 @@ const ProposalsPage = () => {
     if (filter === 'declined') return ['declined', 'rejected'].includes(proposal.status);
     return proposal.status === filter;
   }) || [];
+
+  const getProposalBudgetAmount = (proposal) => {
+    if (proposal?.proposedBudget && typeof proposal.proposedBudget === 'object') {
+      return proposal.proposedBudget.amount || 0;
+    }
+
+    return proposal?.proposedBudget || 0;
+  };
+
+  const getProposalDeliveryDays = (proposal) => {
+    if (proposal?.deliveryTime && typeof proposal.deliveryTime === 'object') {
+      return proposal.deliveryTime.value || 0;
+    }
+
+    return proposal?.deliveryTime || 0;
+  };
 
   if (isLoading) {
     return (
@@ -189,7 +209,7 @@ const ProposalsPage = () => {
                     <div>
                       <p className="text-sm text-gray-600">Bid Amount</p>
                       <p className="font-semibold text-gray-900">
-                        {formatCurrency(proposal.proposedBudget)}
+                        {formatCurrency(getProposalBudgetAmount(proposal))}
                       </p>
                     </div>
                   </div>
@@ -198,7 +218,7 @@ const ProposalsPage = () => {
                     <div>
                       <p className="text-sm text-gray-600">Delivery Time</p>
                       <p className="font-semibold text-gray-900">
-                        {proposal.deliveryTime} days
+                        {getProposalDeliveryDays(proposal)} days
                       </p>
                     </div>
                   </div>

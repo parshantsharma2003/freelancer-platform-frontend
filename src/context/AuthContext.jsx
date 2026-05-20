@@ -34,7 +34,7 @@ const authReducer = (state, action) => {
         user: action.payload.user,
         accessToken: action.payload.accessToken,
         refreshToken: action.payload.refreshToken,
-        isAuthenticated: !!action.payload.accessToken,
+        isAuthenticated: !!action.payload.user,
         isAuthResolved: true,
       };
 
@@ -72,6 +72,8 @@ const authReducer = (state, action) => {
         refreshToken: null,
         isAuthenticated: false,
         isAuthResolved: true,
+        isLoading: false,
+        error: null,
       };
 
     case AUTH_ACTIONS.UPDATE_USER:
@@ -95,46 +97,54 @@ const authReducer = (state, action) => {
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Initialize auth from localStorage on mount
+  const clearStoredAuth = () => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+  };
+
+  // Initialize auth from secure cookies first, then sync local access token.
   useEffect(() => {
     const initializeAuth = async () => {
+      const accessToken = localStorage.getItem('accessToken');
+      const user = localStorage.getItem('user');
+      const hasStoredAccessToken = !!(
+        accessToken &&
+        accessToken !== 'undefined' &&
+        accessToken !== 'null'
+      );
+      const hasStoredUser = !!(user && user !== 'undefined' && user !== 'null');
+
       try {
-        const storedToken = localStorage.getItem('accessToken');
-        const storedUser = localStorage.getItem('user');
-        const storedRefreshToken = localStorage.getItem('refreshToken');
+        const sessionResponse = await authAPI.session({ skipAuthRefresh: true });
+        const sessionData = sessionResponse?.data?.data || {};
+        const verifiedUser = sessionData.authenticated ? sessionData.user || null : null;
 
-        if (storedToken && storedUser) {
-          try {
-            const response = await authAPI.getMe();
-            const verifiedUser = response.data?.data?.user;
+        if (verifiedUser) {
+          const accessToken = sessionData.accessToken || localStorage.getItem('accessToken') || null;
 
-            if (!verifiedUser) {
-              throw new Error('Unable to verify user session');
-            }
-
-            localStorage.setItem('user', JSON.stringify(verifiedUser));
-
-            dispatch({
-              type: AUTH_ACTIONS.INIT_AUTH,
-              payload: {
-                accessToken: storedToken,
-                refreshToken: storedRefreshToken,
-                user: verifiedUser,
-              },
-            });
-          } catch (error) {
-            // Token expired or invalid, logout
+          if (accessToken) {
+            localStorage.setItem('accessToken', accessToken);
+          } else {
             localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('user');
-            dispatch({ type: AUTH_ACTIONS.LOGOUT });
           }
+
+          localStorage.setItem('user', JSON.stringify(verifiedUser));
+
+          dispatch({
+            type: AUTH_ACTIONS.INIT_AUTH,
+            payload: {
+              accessToken,
+              refreshToken: null,
+              user: verifiedUser,
+            },
+          });
         } else {
-          // No stored token, mark auth as resolved
+          clearStoredAuth();
           dispatch({ type: AUTH_ACTIONS.SET_AUTH_RESOLVED });
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        clearStoredAuth();
         dispatch({ type: AUTH_ACTIONS.SET_AUTH_RESOLVED });
       }
     };
@@ -143,6 +153,7 @@ export const AuthProvider = ({ children }) => {
 
     // Listen for auth:logout custom event from interceptor
     const handleAuthLogout = () => {
+      clearStoredAuth();
       dispatch({ type: AUTH_ACTIONS.LOGOUT });
     };
 
@@ -165,28 +176,41 @@ export const AuthProvider = ({ children }) => {
 
       try {
         const response = await authAPI.login(credentials);
-        // Backend returns data in response.data.data structure
-        const { user, accessToken, refreshToken } = response.data.data;
+        const { user, accessToken } = response?.data?.data || {};
 
-        // Save to localStorage
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
+        if (!user) {
+          throw new Error('Invalid login response');
+        }
+
+        if (accessToken) {
+          localStorage.setItem('accessToken', accessToken);
+        } else {
+          localStorage.removeItem('accessToken');
+        }
+
+        localStorage.removeItem('refreshToken');
         localStorage.setItem('user', JSON.stringify(user));
 
-        // Update context state - sets isAuthenticated and isAuthResolved
         dispatch({
           type: AUTH_ACTIONS.LOGIN_SUCCESS,
-          payload: { user, accessToken, refreshToken },
+          payload: { user, accessToken, refreshToken: null },
         });
 
         return { success: true, user };
       } catch (error) {
         const errorMsg = error.response?.data?.message || 'Login failed';
+        const errorData = error.response?.data?.data || {};
         dispatch({
           type: AUTH_ACTIONS.LOGIN_FAILURE,
           payload: { error: errorMsg },
         });
-        return { success: false, error: errorMsg };
+        return {
+          success: false,
+          error: errorMsg,
+          requiresEmailVerification: !!errorData.requiresEmailVerification,
+          verificationMethod: errorData.verificationMethod || null,
+          email: errorData.email || credentials?.email || ''
+        };
       }
     },
     [state.isLoading]
@@ -204,27 +228,63 @@ export const AuthProvider = ({ children }) => {
 
       try {
         const response = await authAPI.register(credentials);
-        const { user, accessToken, refreshToken } = response.data.data;
+        const { user, accessToken, requiresEmailVerification, verificationUrl, email } = response?.data?.data || {};
 
-        // Save to localStorage
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
+        if (requiresEmailVerification) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          dispatch({ type: AUTH_ACTIONS.LOGOUT });
+
+          return {
+            success: true,
+            requiresEmailVerification: true,
+            user: user || null,
+            email: email || credentials?.email || '',
+            verificationUrl,
+          };
+        }
+
+        if (!user) {
+          throw new Error('Invalid registration response');
+        }
+
+        if (accessToken) {
+          localStorage.setItem('accessToken', accessToken);
+        } else {
+          localStorage.removeItem('accessToken');
+        }
+
+        localStorage.removeItem('refreshToken');
         localStorage.setItem('user', JSON.stringify(user));
 
-        // Update context state
         dispatch({
           type: AUTH_ACTIONS.LOGIN_SUCCESS,
-          payload: { user, accessToken, refreshToken },
+          payload: { user, accessToken, refreshToken: null },
         });
 
         return { success: true, user };
       } catch (error) {
-        const errorMsg = error.response?.data?.message || 'Registration failed';
+        const responseData = error.response?.data || {};
+        const errorData = responseData?.data || {};
+        const validationErrors = Array.isArray(responseData?.errors) ? responseData.errors : [];
+        const errorMsg =
+          validationErrors[0]?.message ||
+          responseData?.message ||
+          'Registration failed';
         dispatch({
           type: AUTH_ACTIONS.LOGIN_FAILURE,
           payload: { error: errorMsg },
         });
-        return { success: false, error: errorMsg };
+        return {
+          success: false,
+          error: errorMsg,
+          validationErrors,
+          requiresEmailVerification: !!errorData.requiresEmailVerification,
+          verificationMethod: errorData.verificationMethod || null,
+          email: errorData.email || credentials?.email || '',
+          verificationOtp: errorData.verificationOtp || null
+        };
       }
     },
     [state.isLoading]
@@ -242,7 +302,7 @@ export const AuthProvider = ({ children }) => {
 
       try {
         const response = await adminAPI.login(credentials);
-        const { user, accessToken, refreshToken } = response.data.data;
+        const { user, accessToken } = response?.data?.data || {};
 
         // Verify super admin role
         if (user?.role !== 'super_admin') {
@@ -254,15 +314,18 @@ export const AuthProvider = ({ children }) => {
           return { success: false, error: errorMsg };
         }
 
-        // Save to localStorage
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
+        if (accessToken) {
+          localStorage.setItem('accessToken', accessToken);
+        } else {
+          localStorage.removeItem('accessToken');
+        }
+
+        localStorage.removeItem('refreshToken');
         localStorage.setItem('user', JSON.stringify(user));
 
-        // Update context state
         dispatch({
           type: AUTH_ACTIONS.LOGIN_SUCCESS,
-          payload: { user, accessToken, refreshToken },
+          payload: { user, accessToken, refreshToken: null },
         });
 
         return { success: true, user };
@@ -278,12 +341,59 @@ export const AuthProvider = ({ children }) => {
     [state.isLoading]
   );
 
+  const otpLogin = useCallback(
+    async ({ email, otp }) => {
+      if (state.isLoading) {
+        return { success: false, error: 'Login in progress' };
+      }
+
+      dispatch({ type: AUTH_ACTIONS.LOGIN_START });
+
+      try {
+        const response = await authAPI.verifyLoginOtp(email, otp);
+        const { user, accessToken } = response?.data?.data || {};
+
+        if (!user) {
+          throw new Error('Invalid OTP login response');
+        }
+
+        if (accessToken) {
+          localStorage.setItem('accessToken', accessToken);
+        } else {
+          localStorage.removeItem('accessToken');
+        }
+
+        localStorage.removeItem('refreshToken');
+        localStorage.setItem('user', JSON.stringify(user));
+
+        dispatch({
+          type: AUTH_ACTIONS.LOGIN_SUCCESS,
+          payload: { user, accessToken, refreshToken: null },
+        });
+
+        return { success: true, user };
+      } catch (error) {
+        const errorMsg = error.response?.data?.message || 'OTP login failed';
+        dispatch({
+          type: AUTH_ACTIONS.LOGIN_FAILURE,
+          payload: { error: errorMsg },
+        });
+        return { success: false, error: errorMsg };
+      }
+    },
+    [state.isLoading]
+  );
+
   // Logout function
-  const logout = useCallback(() => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    dispatch({ type: AUTH_ACTIONS.LOGOUT });
+  const logout = useCallback(async () => {
+    try {
+      await authAPI.logout();
+    } catch {
+      // Local cleanup still happens even if the network request fails.
+    } finally {
+      clearStoredAuth();
+      dispatch({ type: AUTH_ACTIONS.LOGOUT });
+    }
   }, []);
 
   // Update user
@@ -300,6 +410,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     adminLogin,
+    otpLogin,
     logout,
     updateUser,
   };

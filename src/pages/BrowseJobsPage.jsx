@@ -1,13 +1,19 @@
-import { useQuery } from 'react-query';
-import { jobAPI } from '../services/api';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { jobAPI, freelancerAPI } from '../services/api';
 import { Link } from 'react-router-dom';
-import { Search, MapPin, DollarSign, Clock } from 'lucide-react';
+import { Search, DollarSign, Clock, Bookmark } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { formatCurrency, formatRelativeTime } from '../lib/utils';
+import { formatCurrency, formatRelativeTime, truncateText } from '../lib/utils';
+import { addSavedJobToCache, getSavedJobsCache, removeSavedJobFromCache } from '../lib/savedJobsCache';
 import socketService from '../services/socketService';
 import { showToast } from '../components/ui/Toast';
+import { useAuth } from '../context/AuthContext';
 
 const BrowseJobsPage = () => {
+  const queryClient = useQueryClient();
+  const { user, isAuthResolved, isAuthenticated } = useAuth();
+  const isFreelancer = user?.role === 'freelancer';
+
   const [filters, setFilters] = useState({
     search: '',
     category: '',
@@ -25,6 +31,69 @@ const BrowseJobsPage = () => {
       select: (response) => response?.data?.data?.jobs || []
     }
   );
+
+  const { data: savedJobsData } = useQuery(
+    ['savedJobIds'],
+    () => freelancerAPI.getSavedJobs({ page: 1, limit: 200 }),
+    {
+      enabled: isFreelancer && isAuthResolved && isAuthenticated,
+      select: (response) => {
+        const apiJobs = response?.data?.data?.jobs || [];
+        return apiJobs.length > 0 ? apiJobs : getSavedJobsCache();
+      }
+    }
+  );
+
+  const savedJobIds = new Set((savedJobsData || []).map((job) => job._id));
+
+  const saveJobMutation = useMutation(
+    (jobId) => freelancerAPI.saveJob(jobId),
+    {
+      onSuccess: (_, jobId) => {
+        const savedJob = jobs.find((job) => job._id === jobId);
+
+        if (savedJob) {
+          addSavedJobToCache(savedJob);
+          queryClient.setQueryData(['savedJobIds'], getSavedJobsCache());
+        }
+
+        queryClient.invalidateQueries('savedJobIds');
+        queryClient.invalidateQueries('savedJobs');
+        window.dispatchEvent(new CustomEvent('saved-jobs:changed'));
+        showToast.success('Job saved');
+      },
+      onError: (error) => {
+        showToast.error(error?.response?.data?.message || 'Failed to save job');
+      }
+    }
+  );
+
+  const unsaveJobMutation = useMutation(
+    (jobId) => freelancerAPI.unsaveJob(jobId),
+    {
+      onSuccess: (_, jobId) => {
+        removeSavedJobFromCache(jobId);
+        queryClient.setQueryData(['savedJobIds'], getSavedJobsCache());
+
+        queryClient.invalidateQueries('savedJobIds');
+        queryClient.invalidateQueries('savedJobs');
+        window.dispatchEvent(new CustomEvent('saved-jobs:changed'));
+        showToast.success('Job removed from saved');
+      },
+      onError: (error) => {
+        showToast.error(error?.response?.data?.message || 'Failed to remove saved job');
+      }
+    }
+  );
+
+  const toggleSaveJob = (jobId, isSaved) => {
+    if (isSaved) {
+      unsaveJobMutation.mutate(jobId);
+      return;
+    }
+
+    saveJobMutation.mutate(jobId);
+  };
 
   // 📡 Listen for real-time job postings via Socket.io
   useEffect(() => {
@@ -84,47 +153,52 @@ const BrowseJobsPage = () => {
             <p>Loading jobs...</p>
           ) : jobs.length > 0 ? (
             jobs.map((job) => (
-              <Link
+              <article
                 key={job._id}
-                to={`/jobs/${job._id}`}
-                className="card hover:shadow-lg transition-all"
+                className="card border border-transparent transition-all hover:shadow-md"
               >
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-semibold mb-2">{job.title}</h3>
-                    <p className="text-gray-600 mb-3 line-clamp-2">{job.description}</p>
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {job.skills?.slice(0, 5).map((skill, index) => (
-                        <span
-                          key={index}
-                          className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
-                        >
-                          {skill}
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xl font-semibold text-gray-900">{job.title}</h3>
+                    <p className="mt-2 text-gray-600">
+                      {truncateText(job.description || '', 180)}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <DollarSign size={16} />
+                        <span>
+                          {job.budget?.type === 'fixed'
+                            ? formatCurrency(job.budget.amount)
+                            : `${formatCurrency(job.budget.minAmount)} - ${formatCurrency(job.budget.maxAmount)}/hr`}
                         </span>
-                      ))}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock size={16} />
+                        <span>{formatRelativeTime(job.createdAt)}</span>
+                      </span>
+                      <span className="font-medium text-primary-700">{job.proposalsCount || 0} proposals</span>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center justify-between text-sm text-gray-600">
-                  <div className="flex items-center space-x-4">
-                    <span className="flex items-center space-x-1">
-                      <DollarSign size={16} />
-                      <span>
-                        {job.budget?.type === 'fixed'
-                          ? formatCurrency(job.budget.amount)
-                          : `${formatCurrency(job.budget.minAmount)} - ${formatCurrency(job.budget.maxAmount)}/hr`}
-                      </span>
-                    </span>
-                    <span className="flex items-center space-x-1">
-                      <Clock size={16} />
-                      <span>{formatRelativeTime(job.createdAt)}</span>
-                    </span>
+                  <div className="flex items-start gap-2">
+                    {isFreelancer && (
+                      <button
+                        type="button"
+                        onClick={() => toggleSaveJob(job._id, savedJobIds.has(job._id))}
+                        className={`btn ${savedJobIds.has(job._id) ? 'btn-secondary' : 'btn-outline'}`}
+                        disabled={saveJobMutation.isLoading || unsaveJobMutation.isLoading}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Bookmark size={16} />
+                          {savedJobIds.has(job._id) ? 'Saved' : 'Save Job'}
+                        </span>
+                      </button>
+                    )}
+                    <Link to={`/jobs/${job._id}`} className="btn btn-primary">
+                      View Details
+                    </Link>
                   </div>
-                  <span className="font-semibold text-primary-600">
-                    {job.proposalsCount} proposals
-                  </span>
                 </div>
-              </Link>
+              </article>
             ))
           ) : (
             <p className="text-center text-gray-500 py-12">No jobs found</p>

@@ -20,7 +20,7 @@ import socketService from '../services/socketService';
 import { formatDistanceToNow } from 'date-fns';
 
 const DashboardPage = () => {
-  const { user, accessToken, isAuthResolved } = useAuth();
+  const { user, isAuthenticated, isAuthResolved } = useAuth();
   const isFreelancer = user?.role === 'freelancer';
   const isClient = user?.role === 'client';
   const [recentActivity, setRecentActivity] = useState([]);
@@ -30,7 +30,7 @@ const DashboardPage = () => {
     'myJobs',
     () => jobAPI.getMyJobs({ limit: 5 }),
     { 
-      enabled: isClient && isAuthResolved && !!accessToken,
+      enabled: isClient && isAuthResolved && isAuthenticated,
       retry: false,
       refetchOnMount: 'stale',
       refetchOnWindowFocus: false,
@@ -41,11 +41,11 @@ const DashboardPage = () => {
     }
   );
 
-  const { data: proposals = { data: { proposals: [] } }, isLoading: proposalsLoading } = useQuery(
+  const { data: proposals = { data: { proposals: [] } }, isLoading: proposalsLoading, refetch: refetchProposals } = useQuery(
     'myProposals',
     () => proposalAPI.getMyProposals({ limit: 5 }),
     { 
-      enabled: isFreelancer && isAuthResolved && !!accessToken,
+      enabled: isFreelancer && isAuthResolved && isAuthenticated,
       retry: false,
       refetchOnMount: 'stale',
       refetchOnWindowFocus: false,
@@ -56,11 +56,11 @@ const DashboardPage = () => {
     }
   );
 
-  const { data: contracts = { data: { contracts: [] } }, isLoading: contractsLoading } = useQuery(
+  const { data: contracts = { data: { contracts: [] } }, isLoading: contractsLoading, refetch: refetchContracts } = useQuery(
     'myContracts',
     () => contractAPI.getMyContracts({ limit: 5 }),
     {
-      enabled: isAuthResolved && !!accessToken,
+      enabled: isAuthResolved && isAuthenticated,
       retry: false,
       refetchOnMount: 'stale',
       refetchOnWindowFocus: false,
@@ -71,11 +71,11 @@ const DashboardPage = () => {
     }
   );
 
-  const { data: paymentStats } = useQuery(
+  const { data: paymentStats, refetch: refetchPaymentStats } = useQuery(
     'paymentStats',
     () => paymentAPI.getPaymentStats(),
     {
-      enabled: isAuthResolved && !!accessToken,
+      enabled: isAuthResolved && isAuthenticated,
       retry: false,
       onError: (error) => {
         console.error('Error fetching payment stats:', error);
@@ -83,11 +83,11 @@ const DashboardPage = () => {
     }
   );
 
-  const { data: earningsData } = useQuery(
+  const { data: earningsData, refetch: refetchEarningsData } = useQuery(
     'earningsByMonth',
     () => paymentAPI.getEarningsByMonth(6),
     {
-      enabled: isAuthResolved && !!accessToken,
+      enabled: isAuthResolved && isAuthenticated,
       retry: false,
       onError: (error) => {
         console.error('Error fetching earnings data:', error);
@@ -111,7 +111,7 @@ const DashboardPage = () => {
         });
       }
 
-      // For freelancers: Listen for job-related events
+      // For freelancers: Listen for dashboard-affecting events
       if (isFreelancer) {
         socketService.on('job:new', (event) => {
           const data = event.data || event;
@@ -121,6 +121,39 @@ const DashboardPage = () => {
         socketService.on('proposal:accepted', (event) => {
           const data = event.data || event;
           showToast.success(`Your proposal was accepted for: ${data.jobTitle}`);
+          refetchProposals();
+          refetchContracts();
+        });
+
+        socketService.on('contract_created', () => {
+          refetchContracts();
+        });
+
+        socketService.on('contract:updated', () => {
+          refetchContracts();
+        });
+
+        socketService.on('payment_completed', () => {
+          refetchPaymentStats();
+          refetchEarningsData();
+        });
+
+        socketService.on('notification:new', (event) => {
+          const notificationType = event?.data?.type;
+
+          if (['proposal_accepted'].includes(notificationType)) {
+            refetchProposals();
+            refetchContracts();
+          }
+
+          if (['contract_created'].includes(notificationType)) {
+            refetchContracts();
+          }
+
+          if (['payment_received'].includes(notificationType)) {
+            refetchPaymentStats();
+            refetchEarningsData();
+          }
         });
       }
     };
@@ -132,8 +165,20 @@ const DashboardPage = () => {
       socketService.off('proposal:new');
       socketService.off('job:new');
       socketService.off('proposal:accepted');
+      socketService.off('contract_created');
+      socketService.off('contract:updated');
+      socketService.off('payment_completed');
+      socketService.off('notification:new');
     };
-  }, [isClient, isFreelancer, refetchJobs]);
+  }, [
+    isClient,
+    isFreelancer,
+    refetchJobs,
+    refetchProposals,
+    refetchContracts,
+    refetchPaymentStats,
+    refetchEarningsData
+  ]);
 
   if (jobsLoading || proposalsLoading || contractsLoading) {
     return <PageLoader message="Loading your dashboard..." />;
