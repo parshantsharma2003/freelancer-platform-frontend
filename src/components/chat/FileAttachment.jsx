@@ -140,8 +140,7 @@ const FileAttachment = ({ attachment, onPreview, isMine = false }) => {
 
     try {
       // Extract relative file path from the URL
-      // URL format: http://localhost:5001/uploads/chat/2026/05/filename
-      // or http://localhost/uploads/chat/2026/05/filename
+      // URL format: /uploads/chat/2026/05/filename or a fully qualified production URL
       const urlObj = new URL(url, window.location.origin);
       const pathname = urlObj.pathname; // /uploads/chat/2026/05/filename
       const uploadIndex = pathname.indexOf('/uploads/');

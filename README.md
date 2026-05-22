@@ -166,8 +166,8 @@ const { notifications, addNotification, markAsRead } = useNotificationStore();
 ### Environment Variables
 Create `.env` file:
 ```env
-VITE_API_URL=http://localhost:5000/api
-VITE_SOCKET_URL=http://localhost:5000
+VITE_API_URL=https://freelancerpro-e7cbdnb6bkayc2f8.eastasia-01.azurewebsites.net/api
+VITE_SOCKET_URL=https://freelancerpro-e7cbdnb6bkayc2f8.eastasia-01.azurewebsites.net
 ```
 
 ### Code Style

@@ -14,8 +14,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: 'https://freelancerpro-e7cbdnb6bkayc2f8.eastasia-01.azurewebsites.net',
         changeOrigin: true,
+        secure: true,
       },
     },
   },

@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import { ENV } from '../config/env';
 
-const SOCKET_URL = ENV.API_ORIGIN;
+const SOCKET_URL = ENV.SOCKET_URL;
 
 class SocketService {
   constructor() {
