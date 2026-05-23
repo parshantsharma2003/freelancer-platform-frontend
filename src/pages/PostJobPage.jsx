@@ -219,7 +219,7 @@ const PostJobPage = () => {
           {budgetType === 'fixed' ? (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Fixed Budget (USD) *
+                Fixed Budget (INR) *
               </label>
               <input
                 {...register('fixedAmount', { required: 'Budget is required', min: 1 })}
@@ -235,7 +235,7 @@ const PostJobPage = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Min Hourly Rate (USD) *
+                  Min Hourly Rate (INR) *
                 </label>
                 <input
                   {...register('minAmount', { required: 'Min rate is required', min: 1 })}
@@ -249,7 +249,7 @@ const PostJobPage = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Max Hourly Rate (USD) *
+                  Max Hourly Rate (INR) *
                 </label>
                 <input
                   {...register('maxAmount', { required: 'Max rate is required', min: 1 })}

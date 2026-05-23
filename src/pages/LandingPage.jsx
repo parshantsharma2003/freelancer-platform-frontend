@@ -191,9 +191,9 @@ const LandingPage = () => {
               
               <div className="space-y-3">
                 {[
-                  { role: 'Product Designer', time: '2 hours', rate: '$45' },
-                  { role: 'Motion Artist', time: '1 hour', rate: '$60' },
-                  { role: 'Full-stack Engineer', time: '30 min', rate: '$75' }
+                  { role: 'Product Designer', time: '2 hours', rate: '₹45' },
+                  { role: 'Motion Artist', time: '1 hour', rate: '₹60' },
+                  { role: 'Full-stack Engineer', time: '30 min', rate: '₹75' }
                 ].map((item, i) => (
                   <motion.div
                     key={item.role}

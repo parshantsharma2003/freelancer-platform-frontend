@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { clientAPI } from '../services/api';
 import socketService from '../services/socketService';
+import { formatCurrency } from '../lib/utils';
 
 const AnalyticsPage = () => {
   const [analytics, setAnalytics] = useState({
@@ -96,7 +97,7 @@ const AnalyticsPage = () => {
     },
     {
       label: 'Total Spent',
-      value: `$${analytics.totalSpent.toFixed(2)}`,
+      value: formatCurrency(analytics.totalSpent),
       change: '+0%',
       icon: DollarSign,
       color: 'bg-green-500',

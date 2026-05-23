@@ -789,7 +789,7 @@ const MyProfilePage = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                         <DollarSign className="h-4 w-4" />
-                        Hourly rate (USD)
+                        Hourly rate (INR)
                       </label>
                       <input
                         {...registerFreelancer('hourlyRate', {

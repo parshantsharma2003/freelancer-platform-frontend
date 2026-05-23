@@ -28,7 +28,7 @@ const ContractDetails = () => {
       terms: '',
       budgetAmount: '',
       budgetType: 'fixed',
-      budgetCurrency: 'USD',
+      budgetCurrency: 'INR',
       startDate: ''
     }
   });
@@ -176,7 +176,7 @@ const ContractDetails = () => {
       terms: contract.terms || '',
       budgetAmount: contract.budget?.amount ?? '',
       budgetType: contract.budget?.type || 'fixed',
-      budgetCurrency: contract.budget?.currency || 'USD',
+      budgetCurrency: contract.budget?.currency || 'INR',
       startDate: contract.startDate ? new Date(contract.startDate).toISOString().slice(0, 10) : ''
     });
   }, [contract, reset]);
@@ -297,9 +297,7 @@ const ContractDetails = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
                     <select {...register('budgetCurrency')} className="input w-full">
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                      <option value="GBP">GBP</option>
+                      <option value="INR">INR</option>
                     </select>
                   </div>
                   <div>

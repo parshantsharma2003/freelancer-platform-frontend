@@ -70,7 +70,7 @@ const EditJobPage = () => {
       // Construct budget object based on type
       const budget = {
         type: data.budgetType,
-        currency: 'USD'
+        currency: 'INR'
       };
 
       if (data.budgetType === 'fixed') {

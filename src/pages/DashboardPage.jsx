@@ -18,6 +18,7 @@ import { PageLoader } from '../components/ui/LoadingSpinner';
 import { showToast } from '../components/ui/Toast';
 import socketService from '../services/socketService';
 import { formatDistanceToNow } from 'date-fns';
+import { formatCurrency } from '../lib/utils';
 
 const DashboardPage = () => {
   const { user, isAuthenticated, isAuthResolved } = useAuth();
@@ -203,7 +204,7 @@ const DashboardPage = () => {
     },
     { 
       title: isFreelancer ? 'Total Earnings' : 'Total Spent', 
-      value: `$${Math.round(paymentStats?.data?.total || 0).toLocaleString()}`,
+      value: formatCurrency(paymentStats?.data?.total || 0),
       description: isFreelancer ? 'Earnings released' : 'Released payments',
       icon: <DollarSign className="h-6 w-6" />,
       color: 'info'

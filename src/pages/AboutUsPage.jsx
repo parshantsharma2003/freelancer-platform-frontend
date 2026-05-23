@@ -29,7 +29,7 @@ function AboutUsPage() {
     { value: '500K+', label: 'Active Freelancers' },
     { value: '100K+', label: 'Happy Clients' },
     { value: '2M+', label: 'Projects Completed' },
-    { value: '$500M+', label: 'Total Earnings' }
+    { value: '₹4,000 Cr+', label: 'Total Earnings' }
   ];
 
   const team = [

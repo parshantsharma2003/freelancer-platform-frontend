@@ -287,7 +287,7 @@ const JobDetailsPage = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Your Bid (USD) *
+                        Your Bid (INR) *
                       </label>
                       <input
                         {...register('proposedBudget', { required: 'Bid is required', min: 1 })}

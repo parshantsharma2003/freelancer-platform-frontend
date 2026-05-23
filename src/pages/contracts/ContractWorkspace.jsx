@@ -15,6 +15,7 @@ import { useAuth } from "../../context/AuthContext";
 // Updated import to local directory
 import MilestoneList from "../../components/contracts/MilestoneList";
 import CreateMilestoneModal from "../../components/contracts/CreateMilestoneModal";
+import { formatCurrency } from "../../lib/utils";
 
 const ContractWorkspace = () => {
   const { id } = useParams();
@@ -68,8 +69,8 @@ const ContractWorkspace = () => {
             <div>
               <p className="text-sm text-gray-500">Budget</p>
               <p className="text-lg font-semibold flex items-center gap-1">
-                <DollarSign className="w-4 h-4" />$
-                {contract?.budget?.amount || 0}
+                <DollarSign className="w-4 h-4" />
+                {formatCurrency(contract?.budget?.amount || 0)}
               </p>
             </div>
 
@@ -90,7 +91,7 @@ const ContractWorkspace = () => {
             <div>
               <p className="text-sm text-gray-500">Total Paid</p>
               <p className="text-lg font-semibold">
-                ${contract?.totalPaid || 0}
+                {formatCurrency(contract?.totalPaid || 0)}
               </p>
             </div>
           </div>

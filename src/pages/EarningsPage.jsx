@@ -14,6 +14,7 @@ import {
 
 import { paymentAPI, userAPI } from "../services/api";
 import { showToast } from "../components/ui/Toast";
+import { formatCurrency } from "../lib/utils";
 
 const EarningsPage = () => {
   const queryClient = useQueryClient();
@@ -92,7 +93,7 @@ const EarningsPage = () => {
   const stats = [
     {
       label: "Total Earnings",
-      value: `$${statsResponse.total || 0}`,
+      value: formatCurrency(statsResponse.total || 0),
       change: `${statsResponse.successRate || 0}%`,
       icon: DollarSign,
       color: "bg-green-500",
@@ -209,12 +210,12 @@ const EarningsPage = () => {
 
           <div className="bg-white p-6 rounded-lg shadow">
             <p className="text-sm text-gray-500 mb-1">Available Balance</p>
-            <p className="text-3xl font-bold text-green-600">${availableBalance.toFixed(2)}</p>
+            <p className="text-3xl font-bold text-green-600">{formatCurrency(availableBalance)}</p>
           </div>
 
           <div className="bg-white p-6 rounded-lg shadow">
             <p className="text-sm text-gray-500 mb-1">Pending Withdrawal</p>
-            <p className="text-3xl font-bold text-yellow-600">${pendingBalance.toFixed(2)}</p>
+            <p className="text-3xl font-bold text-yellow-600">{formatCurrency(pendingBalance)}</p>
           </div>
 
           <form onSubmit={handleWithdraw} className="bg-white p-6 rounded-lg shadow">
