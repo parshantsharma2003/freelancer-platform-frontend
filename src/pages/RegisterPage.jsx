@@ -143,7 +143,7 @@ const RegisterPage = () => {
     updateField('role', role);
 
     if (signupMethod === 'google') {
-      window.location.href = `${ENV.OAUTH_BASE_URL}/auth/oauth/google?role=${role}`;
+      window.location.href = `${ENV.OAUTH_BASE_URL}/auth/google?role=${role}`;
       return;
     }
   };
