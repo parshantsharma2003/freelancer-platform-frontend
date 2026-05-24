@@ -53,12 +53,12 @@ const LandingPage = () => {
     },
     {
       quote: 'The escrow and milestones made working across time zones feel effortless.',
-      name: 'Mateo Alvarez',
+      name: 'Deepak Singh',
       role: 'Ops Lead, Northwind'
     },
     {
       quote: 'It finally feels like a marketplace built for freelancers, not just clients.',
-      name: 'Julien Park',
+      name: 'Riya Patel',
       role: 'Freelance Engineer'
     }
   ];
@@ -191,9 +191,9 @@ const LandingPage = () => {
               
               <div className="space-y-3">
                 {[
-                  { role: 'Product Designer', time: '2 hours', rate: '₹45' },
-                  { role: 'Motion Artist', time: '1 hour', rate: '₹60' },
-                  { role: 'Full-stack Engineer', time: '30 min', rate: '₹75' }
+                  { role: 'Product Designer', time: '2 hours', rate: '₹450' },
+                  { role: 'Motion Artist', time: '1 hour', rate: '₹600' },
+                  { role: 'Full-stack Engineer', time: '30 min', rate: '₹750' }
                 ].map((item, i) => (
                   <motion.div
                     key={item.role}

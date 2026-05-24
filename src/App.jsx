@@ -13,7 +13,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
-import OAuthCallback from "./components/OAuthCallback";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import DashboardPage from "./pages/DashboardPage";
 import BrowseJobsPage from "./pages/BrowseJobsPage";
 import JobDetailsPage from "./pages/JobDetailsPage";
@@ -164,7 +164,7 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
             <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
-            <Route path="/oauth/callback" element={<OAuthCallback />} />
+            <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
             <Route path="/browse-jobs" element={<BrowseJobsPage />} />
             <Route path="/jobs/:id" element={<JobDetailsPage />} />
             <Route path="/freelancers" element={<FreelancersPage />} />

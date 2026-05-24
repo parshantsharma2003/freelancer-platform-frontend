@@ -34,25 +34,25 @@ function AboutUsPage() {
 
   const team = [
     {
-      name: 'Sarah Johnson',
+      name: 'Muskaan Rana',
       role: 'CEO & Co-Founder',
       bio: 'Former VP at UpWork with 15 years of experience in the freelance industry.',
       image: 'https://randomuser.me/api/portraits/women/1.jpg'
     },
     {
-      name: 'Michael Chen',
+      name: 'Arjun Mehta',
       role: 'CTO & Co-Founder',
       bio: 'Tech visionary with background from Google and experience building scalable platforms.',
       image: 'https://randomuser.me/api/portraits/men/1.jpg'
     },
     {
-      name: 'Emily Rodriguez',
+      name: 'Alia Sharma',
       role: 'Head of Operations',
       bio: 'Operations expert focused on creating seamless experiences for our community.',
       image: 'https://randomuser.me/api/portraits/women/2.jpg'
     },
     {
-      name: 'David Park',
+      name: 'Papu Yadav',
       role: 'Head of Product',
       bio: 'Product strategist passionate about building tools that empower freelancers.',
       image: 'https://randomuser.me/api/portraits/men/2.jpg'
