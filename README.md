@@ -1,268 +1,174 @@
 # FreelancePro Frontend
 
-Modern React application built with Vite for the FreelancePro platform.
+Production-ready React frontend for the FreelancePro platform. This repository contains the client application only: the UI, routing, state management, API integration, and real-time features that power the platform experience.
 
-## 🚀 Quick Start
+## Overview
 
-```bash
-# Install dependencies
-npm install
+FreelancePro Frontend is built with Vite and React 18, styled with Tailwind CSS, and designed to work with the backend API over REST and Socket.IO. It supports multiple user roles and includes flows for browsing jobs, posting work, messaging, contracts, payments, notifications, and admin management.
 
-# Start development server
-npm run dev
+## Tech Stack
 
-# Build for production
-npm run build
+- React 18
+- Vite
+- Tailwind CSS
+- React Router DOM
+- Zustand
+- React Query
+- Axios
+- Socket.IO Client
+- Framer Motion
+- react-hook-form
+- react-hot-toast
+- Recharts
 
-# Preview production build
-npm run preview
-```
+## Key Features
 
-## 📂 Project Structure
+- Role-based authentication and protected routes
+- Freelancer, client, admin, and super admin experiences
+- Landing page with platform overview and onboarding entry points
+- Job browsing, job details, posting, and editing flows
+- Freelancer profile, saved jobs, proposals, and earnings views
+- Chat, direct messaging, notifications, and real-time updates
+- Contract and payment-related screens
+- Analytics and dashboard views for platform management
+- Responsive UI for mobile, tablet, and desktop
+
+## Pages and Screens
+
+The app includes pages such as:
+
+- Landing, login, register, forgot password, verify email, and OAuth callback
+- Dashboard, my jobs, browse jobs, job details, post job, edit job, saved jobs
+- Freelancers, freelancer profile, proposals, proposal details
+- Messages, chat, direct messages, notifications
+- Contracts, contract details, payments, earnings
+- Client onboarding and freelancer onboarding
+- Admin dashboard, admin login, analytics
+- About, how it works, careers, privacy, and terms
+
+## Project Structure
 
 ```
 src/
-├── components/          # Reusable UI components
-│   ├── Navbar.jsx
-│   ├── Footer.jsx
-│   └── ProtectedRoute.jsx
-├── pages/              # Page components
-│   ├── LandingPage.jsx
-│   ├── LoginPage.jsx
-│   ├── RegisterPage.jsx
-│   ├── DashboardPage.jsx
-│   ├── BrowseJobsPage.jsx
-│   ├── FreelancersPage.jsx
-│   ├── MessagesPage.jsx
-│   └── ...
-├── services/           # API service layer
-│   └── api.js
-├── store/             # State management
-│   ├── authStore.js
-│   └── notificationStore.js
-├── lib/               # Utilities
-│   ├── api.js         # Axios instance
-│   ├── socket.js      # Socket.io client
-│   └── utils.js       # Helper functions
-├── App.jsx            # Main app component
-├── main.jsx           # Application entry
-└── index.css          # Global styles
+├── components/        # Shared UI and layout components
+├── config/            # App configuration
+├── context/           # React context providers
+├── lib/               # API, socket, and utility helpers
+├── pages/             # Route-level pages and screens
+├── services/          # Service layer for backend calls
+├── store/             # Zustand stores
+├── App.jsx            # App routes and layout shell
+├── main.jsx           # Vite entry point
+└── index.css          # Global styles and Tailwind base styles
 ```
 
-## 🎨 Styling
+## Getting Started
 
-Built with TailwindCSS for rapid UI development.
+### Prerequisites
 
-### Custom Classes
-```css
-.btn              /* Base button */
-.btn-primary      /* Primary button */
-.btn-secondary    /* Secondary button */
-.btn-outline      /* Outline button */
-.input            /* Form input */
-.card             /* Card container */
+- Node.js 18 or newer
+- npm 9 or newer
+
+### Installation
+
+```bash
+git clone <your-repo-url>
+cd the-frontend
+npm install
 ```
-
-### Color Palette
-```
-Primary: Green (#22c55e - #14532d)
-Gray Scale: Full range
-```
-
-## 🔐 Authentication
-
-### Login Flow
-```javascript
-import { useAuthStore } from './store/authStore';
-
-const { setAuth, logout } = useAuthStore();
-
-// Login
-const response = await authAPI.login(credentials);
-setAuth(user, accessToken, refreshToken);
-
-// Logout
-logout();
-```
-
-### Protected Routes
-```jsx
-<ProtectedRoute roles={['client']}>
-  <PostJobPage />
-</ProtectedRoute>
-```
-
-## 📡 API Integration
-
-### Making API Calls
-```javascript
-import { jobAPI } from './services/api';
-
-// Get jobs
-const jobs = await jobAPI.getJobs({ category: 'development' });
-
-// Create job
-const newJob = await jobAPI.createJob(jobData);
-```
-
-### Using React Query
-```javascript
-import { useQuery } from 'react-query';
-
-const { data, isLoading } = useQuery('jobs', () => jobAPI.getJobs());
-```
-
-## 🔌 Real-time Features
-
-### Socket.io Integration
-```javascript
-import { initializeSocket, onEvent } from './lib/socket';
-
-// Initialize connection
-const socket = initializeSocket(userId);
-
-// Listen for events
-onEvent('new_message', handleNewMessage);
-```
-
-## 🗂️ State Management
-
-Using Zustand for lightweight state management.
-
-### Auth Store
-```javascript
-const { user, isAuthenticated, setAuth, logout } = useAuthStore();
-```
-
-### Notification Store
-```javascript
-const { notifications, addNotification, markAsRead } = useNotificationStore();
-```
-
-## 🎯 Key Features
-
-### Landing Page
-- Hero section with search
-- Category showcase
-- Featured freelancers
-- How it works section
-- Trust indicators
-- CTA sections
-
-### Dashboard
-- Role-based views
-- Statistics cards
-- Recent activity
-- Quick actions
-
-### Job Browsing
-- Advanced filters
-- Search functionality
-- Real-time updates
-- Detailed job cards
-
-## 🛠️ Development
 
 ### Environment Variables
-Create `.env` file:
+
+Create a `.env` file in the frontend root:
+
 ```env
-VITE_API_URL=https://freelancerpro-e7cbdnb6bkayc2f8.eastasia-01.azurewebsites.net/api
-VITE_SOCKET_URL=https://freelancerpro-e7cbdnb6bkayc2f8.eastasia-01.azurewebsites.net
+VITE_API_URL=https://your-backend-domain.com/api
+VITE_SOCKET_URL=https://your-backend-domain.com
 ```
 
-### Code Style
-- Use functional components
-- Prefer hooks over class components
-- Follow ESLint rules
-- Use Prettier for formatting
+If your backend is running locally:
 
-### Component Example
-```jsx
-import { useState } from 'react';
-
-const MyComponent = () => {
-  const [state, setState] = useState(initialValue);
-  
-  return (
-    <div className="card">
-      {/* Component content */}
-    </div>
-  );
-};
-
-export default MyComponent;
+```env
+VITE_API_URL=http://localhost:5000/api
+VITE_SOCKET_URL=http://localhost:5000
 ```
 
-## 📦 Build
+### Run Locally
 
 ```bash
-# Build for production
+npm run dev
+```
+
+Open the app in the browser at the local Vite URL shown in the terminal.
+
+## Available Scripts
+
+```bash
+npm run dev      # Start the Vite development server
+npm run build    # Create a production build in dist/
+npm run preview  # Preview the production build locally
+npm run lint     # Run ESLint across the project
+```
+
+## Architecture Notes
+
+- API requests are centralized through Axios-based helpers.
+- Authentication and UI state are managed with Zustand.
+- Server data and caching use React Query where appropriate.
+- Real-time communication is handled with Socket.IO.
+- Forms are built with react-hook-form for cleaner validation and submission flows.
+
+## Deployment
+
+This is a static frontend application after build, so it can be deployed to Vercel, Netlify, Azure Static Web Apps, or any static hosting platform.
+
+### Build for Production
+
+```bash
 npm run build
-
-# Output directory: dist/
 ```
 
-## 🚀 Deployment
+The compiled output is generated in the `dist/` folder.
 
-### Vercel
-```bash
-vercel
-```
+### SPA Routing
 
-### Netlify
-```bash
-netlify deploy --prod
-```
+If you deploy to a static host, make sure client-side routes are redirected to `index.html`.
 
-### Manual
-1. Build project: `npm run build`
-2. Upload `dist/` folder
-3. Configure redirects for SPA
+For Netlify, use:
 
-### Redirects (_redirects file)
-```
+```txt
 /*    /index.html   200
 ```
 
-## 🎨 Customization
+For Azure Static Web Apps, the included `staticwebapp.config.json` can be used to configure routing.
 
-### Theme Colors
-Edit `tailwind.config.js`:
-```javascript
-theme: {
-  extend: {
-    colors: {
-      primary: { /* your colors */ }
-    }
-  }
-}
-```
+## Customization
 
-### Layout
-Modify `App.jsx` for global layout changes.
+- Update the theme and Tailwind config in `tailwind.config.js`
+- Adjust API endpoints through environment variables
+- Extend routes and layouts in `App.jsx`
+- Add new screens under `src/pages/`
+- Reuse shared UI primitives from `src/components/`
 
-## 🔍 SEO
+## Responsive Design
 
-- Meta tags in `index.html`
-- Dynamic titles per page
-- Open Graph tags ready
-- Sitemap generation recommended
+The interface is built to adapt across screen sizes:
 
-## 📱 Responsive Design
+- Mobile: under 768px
+- Tablet: 768px to 1024px
+- Desktop: above 1024px
 
-All pages are fully responsive:
-- Mobile: < 768px
-- Tablet: 768px - 1024px
-- Desktop: > 1024px
+## Contributing
 
-## 🧪 Testing
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `npm run lint` and `npm run build`
+5. Open a pull request
 
-```bash
-# Add testing library
-npm install --save-dev @testing-library/react
+## License
 
-# Run tests
-npm test
+Add your preferred license here before publishing publicly.
 ```
 
 ## 📊 Performance
